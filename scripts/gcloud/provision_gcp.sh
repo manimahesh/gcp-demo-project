@@ -116,6 +116,17 @@ else
   echo "GKE cluster $CLUSTER already exists"
 fi
 
+# Ensure the cluster node service account can pull images from Artifact Registry
+echo "Determining GKE node service account for cluster $CLUSTER"
+NODE_SA=$(gcloud container clusters describe "$CLUSTER" --region="$REGION" --project="$PROJECT" --format='value(nodeConfig.serviceAccount)') || true
+if [ -z "$NODE_SA" ]; then
+  echo "Cluster node service account not explicitly set; constructing default compute service account"
+  PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
+  NODE_SA="$PROJECT_NUMBER-compute@developer.gserviceaccount.com"
+fi
+echo "Granting roles/artifactregistry.reader to node service account: $NODE_SA"
+gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$NODE_SA" --role="roles/artifactregistry.reader" --quiet || true
+
 echo "Creating service account: $SA_NAME"
 SA_EMAIL="$SA_NAME@$PROJECT.iam.gserviceaccount.com"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT" >/dev/null 2>&1; then
