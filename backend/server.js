@@ -10,7 +10,18 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Serve frontend static
-app.use("/", express.static(path.join(__dirname, "..", "frontend")));
+const frontendDir = path.join(__dirname, "..", "frontend");
+app.use("/", express.static(frontendDir));
+
+// Explicit root handler to ensure index.html is served even if static
+app.get('/', (req, res) => {
+  res.sendFile(path.resolve(frontendDir, 'index.html'), (err) => {
+    if (err) {
+      console.error('Error sending index.html:', err);
+      res.status(500).send('Internal server error');
+    }
+  });
+});
 
 // Simple in-memory comment list for XSS demo
 let comments = [];
@@ -176,3 +187,4 @@ app.use((req, res, next) => {
 // Start server
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log("Demo backend listening on", port));
+console.log('Frontend static directory:', frontendDir);
