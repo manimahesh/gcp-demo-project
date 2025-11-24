@@ -534,6 +534,18 @@ app.post('/api/reset', (req, res) => {
 });
 
 // ====================================================================================
+// Health Check Endpoint (for Kubernetes liveness/readiness probes)
+// ====================================================================================
+
+app.get('/healthz', (_req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: Date.now() });
+});
+
+app.get('/health', (_req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: Date.now() });
+});
+
+// ====================================================================================
 // Start Server
 // ====================================================================================
 

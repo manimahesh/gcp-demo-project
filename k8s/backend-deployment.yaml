@@ -21,7 +21,12 @@ spec:
           image: "REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH"
           imagePullPolicy: Always
           ports:
-            - containerPort: 8080
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NODE_ENV
+              value: "production"
           # Recommended security best-practices for production demos:
           securityContext:
             runAsUser: 1000
@@ -41,14 +46,14 @@ spec:
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 8080
+              port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /healthz
-              port: 8080
+              port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 3
@@ -64,7 +69,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8080
+      targetPort: 3000
   type: LoadBalancer
   # For GKE the default external load balancer will be provisioned. To restrict
   # sources, add `loadBalancerSourceRanges: ['1.2.3.4/32']` or similar.
