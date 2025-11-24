@@ -1,0 +1,23 @@
+# .dockerignore - Exclude unnecessary files from Docker build
+
+# Documentation
+README.md
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

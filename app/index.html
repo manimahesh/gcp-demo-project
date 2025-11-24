@@ -1,116 +1,48 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Vulnerable App Demo</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background:#f4f6f8; }
-    .carousel { max-width: 900px; margin: 24px auto; background: #fff; padding: 20px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
-    .slide { display:none; }
-    .slide.active { display:block; }
-    .controls { margin-top:12px; }
-    .resp { background:#111; color:#0f0; padding:8px; height:120px; overflow:auto; font-family: monospace; }
-    .nav { display:flex; justify-content:space-between; margin-top:12px; }
-    button { padding:8px 12px; }
-    input[type=text] { padding:6px; width:60%; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OWASP Top 10 Security Vulnerabilities Demo</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="carousel">
-    <h2>Web App Vulnerability Demos</h2>
-    <div id="slides"></div>
-    <div class="nav">
-      <button id="prev">Previous</button>
-      <div>Slide <span id="idx">1</span>/10</div>
-      <button id="next">Next</button>
-    </div>
-  </div>
+    <div class="container">
+        <header>
+            <h1>🔒 OWASP Top 10 Security Vulnerabilities</h1>
+            <p class="subtitle">Interactive Educational Demo - Learn about common web application security risks</p>
+        </header>
 
-  <script>
-    const slidesData = [
-      { id: 'sqli', title: 'SQL Injection', desc: 'Send a name to the DB query. Try: bob OR 1=1 to see injection.', inputLabel: 'name', endpoint: '/api/sqli?name=', remediation: 'Use parameterized queries / prepared statements. Validate and whitelist input; use ORMs or query builders.' },
-      { id: 'xss', title: 'Cross-Site Scripting (XSS)', desc: 'Post a comment that will be rendered unescaped.', inputLabel: 'comment', endpoint: '/api/xss', remediation: 'Escape output on render, use a templating engine that auto-escapes, and set a strict Content-Security-Policy.' },
-      { id: 'csrf', title: 'CSRF', desc: 'Change your demo email without anti-CSRF protection.', inputLabel: 'new email', endpoint: '/api/csrf/change-email', remediation: 'Implement anti-CSRF tokens, use SameSite=strict cookies, and require POST with token verification.' },
-      { id: 'auth', title: 'Broken Auth (JWT)', desc: 'Login to get a token with a weak secret.', inputLabel: 'username', endpoint: '/api/auth/login', remediation: 'Use strong secrets, store keys securely, use short-lived access tokens and refresh tokens, and rotate signing keys.' },
-      { id: 'idor', title: 'IDOR / Broken Authorization', desc: 'Fetch arbitrary user data by ID.', inputLabel: 'user id', endpoint: '/api/idor/user/', remediation: 'Enforce authorization checks on every resource access; never trust client-supplied IDs.' },
-      { id: 'iam', title: 'Over-Privileged APIs / IAM', desc: 'Simulated sensitive operation using an over-privileged service account.', inputLabel: 'resource', endpoint: '/api/iam/do', remediation: 'Apply least privilege to service accounts, avoid project-level roles, and use short-lived credentials.' },
-      { id: 'deps', title: 'Vulnerable Dependencies', desc: 'Show installed deps and a simulated scan result.', inputLabel: 'show', endpoint: '/api/vuln-deps', remediation: 'Regularly run SCA tools, upgrade pinned dependencies, and monitor advisories.' },
-      { id: 'container', title: 'Container Bad Practices', desc: 'Check if container runs as root / outdated base image.', inputLabel: 'info', endpoint: '/api/container-info', remediation: 'Use minimal base images, run as non-root, and perform image scanning in CI.' },
-      { id: 'k8s', title: 'Kubernetes Misconfiguration', desc: 'Show a demo misconfigured pod manifest and consequences.', inputLabel: 'show', endpoint: '/api/k8s-misconfig', remediation: 'Enforce PodSecurityStandards, RBAC least privilege, and NetworkPolicies.' },
-      { id: 'ssrf', title: 'SSRF / Metadata', desc: 'Fetch an arbitrary URL (demo only). Try internal metadata URLs conceptually.', inputLabel: 'url', endpoint: '/api/ssrf?url=', remediation: 'Whitelist external hosts, block access to metadata IPs, and use safe fetch libraries.' }
-    ];
+        <div class="carousel-container">
+            <!-- Navigation Buttons -->
+            <button class="nav-btn prev-btn" onclick="navigateCarousel(-1)">‹</button>
 
-    const slidesEl = document.getElementById('slides');
-    slidesData.forEach((s, i) => {
-      const div = document.createElement('div');
-      div.className = 'slide' + (i===0? ' active':'');
-      div.id = s.id;
-      div.innerHTML = `
-        <h3>${s.title}</h3>
-        <p>${s.desc}</p>
-        <div class="controls">
-          <label>${s.inputLabel}: </label>
-          <input type="text" id="input-${s.id}" placeholder="${s.inputLabel}">
-          <button data-endpoint="${s.endpoint}" data-id="${s.id}" class="try">Try</button>
-          <button data-id="${s.id}" class="remed">Remediation</button>
+            <!-- Carousel Content -->
+            <div class="carousel">
+                <div class="carousel-inner" id="carouselInner">
+                    <!-- Slides will be dynamically inserted here by JavaScript -->
+                </div>
+            </div>
+
+            <button class="nav-btn next-btn" onclick="navigateCarousel(1)">›</button>
         </div>
-        <div style="margin-top:8px;"><strong>Response</strong></div>
-        <div id="resp-${s.id}" class="resp"></div>
-      `;
-      slidesEl.appendChild(div);
-    });
 
-    let idx = 0;
-    const update = () => {
-      document.querySelectorAll('.slide').forEach((el,i)=>el.classList.toggle('active', i===idx));
-      document.getElementById('idx').textContent = (idx+1);
-    };
-    document.getElementById('prev').addEventListener('click', ()=>{ idx = (idx+slidesData.length-1)%slidesData.length; update(); });
-    document.getElementById('next').addEventListener('click', ()=>{ idx = (idx+1)%slidesData.length; update(); });
+        <!-- Carousel Indicators -->
+        <div class="indicators" id="indicators">
+            <!-- Indicator dots will be dynamically inserted here -->
+        </div>
 
-    document.addEventListener('click', async (e) => {
-      if (e.target.classList.contains('try')) {
-        const id = e.target.dataset.id;
-        const endpoint = e.target.dataset.endpoint;
-        const input = document.getElementById('input-' + id).value || '';
-        const respEl = document.getElementById('resp-' + id);
-        respEl.textContent = 'Loading...';
-        try {
-          let url = endpoint;
-          let opts = { method: 'GET', headers: { 'Accept': 'application/json' } };
-          if (endpoint.includes('?')) {
-            url = endpoint + encodeURIComponent(input);
-          } else if (endpoint === '/api/xss') {
-            opts = { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ comment: input }) };
-          } else if (endpoint === '/api/csrf/change-email') {
-            opts = { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ email: input }) };
-          } else if (endpoint === '/api/auth/login') {
-            opts = { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ username: input || 'alice' }) };
-          } else if (endpoint.startsWith('/api/idor/user/')) {
-            url = endpoint + encodeURIComponent(input || '1');
-          } else {
-            // default: GET with query appended
-            if (input) url = endpoint + encodeURIComponent(input);
-          }
-          const r = await fetch(url, opts);
-          const text = await r.text();
-          respEl.textContent = text;
-        } catch (err) {
-          respEl.textContent = String(err);
-        }
-      }
-      if (e.target.classList.contains('remed')) {
-        const id = e.target.dataset.id;
-        const slide = slidesData.find(s => s.id === id);
-        const respEl = document.getElementById('resp-' + id);
-        if (slide && slide.remediation) {
-          respEl.textContent = 'Remediation: ' + slide.remediation;
-        } else {
-          respEl.textContent = 'No remediation available.';
-        }
-      }
-    });
-  </script>
+        <!-- Slide Counter -->
+        <div class="slide-counter" id="slideCounter">
+            <span id="currentSlide">1</span> / <span id="totalSlides">10</span>
+        </div>
+
+        <footer>
+            <p>⚠️ <strong>Educational Purpose Only</strong> - These examples demonstrate vulnerabilities for learning. Never implement vulnerable code in production!</p>
+            <p>Based on <a href="https://owasp.org/www-project-top-ten/" target="_blank">OWASP Top 10 2021</a></p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
 </body>
 </html>

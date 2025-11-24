@@ -1,85 +1,84 @@
-# GCP Vulnerable Web App Demo
+# GCP Demo Project - OWASP Top 10 Interactive Security Demo
 
-This repository is a small, intentionally vulnerable web application used for training: a static frontend (demo slides) and a Node.js backend that exposes endpoints illustrating common security issues.
+This project contains an interactive web application for learning about OWASP Top 10 security vulnerabilities through hands-on testing.
 
-WARNING: This project is intentionally vulnerable. Run only in an isolated test project or local environment and never expose it to production or the public internet.
+## Project Structure
 
-**Quick Start — Local**
+```
+gcp-demo-project/
+├── app/                   # OWASP Top 10 Interactive Demo Application
+│   ├── server.js         # Node.js backend with vulnerable & secure APIs
+│   ├── public/           # Frontend files (HTML, CSS, JS)
+│   ├── Dockerfile        # Container configuration
+│   ├── package.json      # Node.js dependencies
+│   ├── README.md         # Application documentation
+│   └── QUICKSTART.md     # Quick start guide
+├── k8s/                  # Kubernetes deployment manifests
+└── scripts/              # Deployment scripts
+```
 
-- Prereqs: Node.js 18+, npm, and Docker (optional).
-- Start locally from the repo root:
+## Quick Start
 
-```pwsh
+### Run the OWASP Demo Application
+
+```bash
 cd app
-npm ci
+npm install
 npm start
 ```
 
-- Open `http://localhost:8080` to view the demo UI.
+Then open: **http://localhost:3000**
 
-**What changed**
+For detailed instructions, see [app/README.md](app/README.md) or [app/QUICKSTART.md](app/QUICKSTART.md)
 
-- The backend no longer requires `sqlite3` (native addon). It uses an in-memory `users` array for the SQLi/IDOR demos, so you can run the app without compiling native modules.
+## What's Included
 
-**Run in Docker (local)**
+### Interactive OWASP Top 10 Demo (app/)
 
-```pwsh
-# build (from repo root so frontend is included)
-docker build -f app/Dockerfile -t vuln-backend:local .
-# run
-docker run --rm -p 8080:8080 vuln-backend:local
-```
+A fully interactive security testing environment with:
 
-Then visit `http://localhost:8080`.
+- ✅ **Real vulnerability exploits** you can test safely
+- ✅ **SQL Injection demo** - Try `admin' --` to bypass login
+- ✅ **Command Injection demo** - Execute system commands
+- ✅ **Access Control testing** - View unauthorized data
+- ✅ **Business Logic flaws** - Exploit negative quantities
+- ✅ **SSRF attacks** - Access internal APIs
+- ✅ **Side-by-side comparison** of vulnerable vs. secure code
+- ✅ **Instant feedback** with executed queries and results
 
-**Deploy to GCP (helper scripts)**
+### Features
 
-This repo includes idempotent gcloud helper scripts to provision resources instead of Terraform. See `scripts/gcloud/provision_gcp.sh` and `scripts/gcloud/destroy_gcp.sh`.
+- **Backend**: Node.js Express server with SQLite database
+- **Frontend**: Interactive tabbed interface
+- **Docker**: Full containerization support
+- **Kubernetes**: Ready for cluster deployment
+- **Educational**: Comprehensive documentation and examples
 
-Typical flow (interactive):
+## Technologies
 
-```pwsh
-# provision resources (APIs, AR repo, VPC, GKE, service accounts, Workload Identity)
-cd scripts/gcloud
-pwsh ./provision_gcp.sh --project YOUR_PROJECT_ID --region us-central1
+- **Backend**: Node.js 18+, Express, SQLite3, Bcrypt
+- **Frontend**: Vanilla JavaScript, HTML5, CSS3
+- **Deployment**: Docker, Kubernetes, GCP
 
-# after provisioning, either run CI or push image manually
-# authenticate gcloud then build & push
-gcloud auth configure-docker us-central1-docker.pkg.dev
-docker build -f app/Dockerfile -t us-central1-docker.pkg.dev/YOUR_PROJECT_ID/vuln-demo-repo/backend:latest .
-docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/vuln-demo-repo/backend:latest
-```
+## Security Notice
 
-The provisioning script prints required values (service account email, Workload Identity provider name) to add to GitHub repository secrets (`GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_SA_EMAIL`, `GKE_CLUSTER_NAME`).
+⚠️ **WARNING**: This application contains intentional security vulnerabilities for educational purposes only.
 
-**CI / GitHub Actions**
+- **DO NOT** deploy to production
+- **DO NOT** expose to the internet
+- **DO** use for learning and training only
+- **DO** run in isolated environments
 
-- The workflow `.github/workflows/ci-build-and-push.yml` builds the Docker image and deploys the `k8s/backend-deployment.yaml` manifest. It expects the image tag format: `us-central1-docker.pkg.dev/$PROJECT/vuln-demo-repo/backend:latest`.
-- The repo uses OIDC/Workload Identity for GitHub Actions — see `scripts/gcloud/provision_gcp.sh` for how the provider and bindings are created.
+## Documentation
 
-**Endpoints overview (selected)**
+- **Application Guide**: [app/README.md](app/README.md)
+- **Quick Start**: [app/QUICKSTART.md](app/QUICKSTART.md)
+- **Kubernetes**: See `k8s/` directory
 
-- `GET /api/sqli?name=alice` — simulated SQLi demo (in-memory). Supplying values that look like SQL injection (quotes or `OR`) will return all users to demonstrate the risk.
-- `POST /api/xss` and `GET /api/xss/comments` — XSS demo (no output encoding in frontend).
-- `POST /api/auth/login` and `GET /api/auth/me` — broken JWT auth demo (weak secret).
-- `GET /api/idor/user/:id` — IDOR demo (no authorization checks).
-- `GET /healthz` — health probe.
+## License
 
-**Security / Safety**
-
-- Do not run this in production. Use a disposable GCP project. All scripts and manifests aim to be minimal and educational.
-- Resources created by `provision_gcp.sh` include labels with `Owner=\"PAN\"` where supported.
-
-**Troubleshooting**
-
-- If you previously had sqlite3 problems, those were due to native addon binaries; the current code removes `sqlite3` so you should not see those errors.
-- For container image push/pull issues, ensure the node (GKE) service account has `roles/artifactregistry.reader` and that GitHub Actions secrets are configured.
-
-If you'd like, I can:
-
-- Add persistence (JSON file or a lightweight JS DB) so data survives container restarts.
-- Reintroduce sqlite3 but add multi-arch Buildx builds that compile native modules per-architecture.
+MIT License - Educational use only
 
 ---
 
-See `scripts/gcloud/README.md` for details about the GCP provisioning scripts.
+**Built for Security Education** 🔒

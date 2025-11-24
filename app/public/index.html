@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OWASP Top 10 Interactive Security Demo</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .demo-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .demo-section {
+            margin: 2rem 0;
+        }
+        .demo-controls {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+        }
+        .demo-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .demo-button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+        .btn-vulnerable {
+            background: #e74c3c;
+            color: white;
+        }
+        .btn-vulnerable:hover {
+            background: #c0392b;
+        }
+        .btn-secure {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-secure:hover {
+            background: #229954;
+        }
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+        .result-box {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .result-box pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .vulnerable-result {
+            border-left-color: #e74c3c;
+            background: #ffeaea;
+        }
+        .secure-result {
+            border-left-color: #27ae60;
+            background: #eafaf1;
+        }
+        .tab-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab {
+            padding: 1rem 1.5rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        .tab:hover {
+            color: #3498db;
+        }
+        .tab.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        .warning-box {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .data-table th,
+        .data-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .badge-admin {
+            background: #e74c3c;
+            color: white;
+        }
+        .badge-user {
+            background: #3498db;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 OWASP Top 10 Interactive Security Demo</h1>
+            <p class="subtitle">Test and learn about web security vulnerabilities hands-on</p>
+        </header>
+
+        <div class="warning-box">
+            <strong>⚠️ Educational Environment</strong>
+            <p>This is a controlled demo environment with intentional vulnerabilities. All examples are for educational purposes only.</p>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <button class="tab active" onclick="showTab('access-control')">Access Control</button>
+            <button class="tab" onclick="showTab('crypto')">Cryptography</button>
+            <button class="tab" onclick="showTab('injection')">Injection</button>
+            <button class="tab" onclick="showTab('design')">Insecure Design</button>
+            <button class="tab" onclick="showTab('ssrf')">SSRF</button>
+            <button class="tab" onclick="showTab('info')">Info</button>
+        </div>
+
+        <!-- A01: Broken Access Control -->
+        <div id="access-control" class="tab-content active">
+            <div class="demo-container">
+                <h2>A01:2021 - Broken Access Control</h2>
+                <p>Test unauthorized access to user data</p>
+
+                <div class="info-box">
+                    <strong>Available Users:</strong>
+                    <div id="users-list">Loading...</div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🔴 Vulnerable Endpoint (No Authorization)</h3>
+                    <p>Try accessing any user's data without authentication!</p>
+
+                    <div class="demo-controls">
+                        <input type="number" id="vuln-user-id" class="demo-input" placeholder="User ID (1, 2, or 3)" value="1">
+                        <button class="demo-button btn-vulnerable" onclick="testAccessControl('vulnerable')">
+                            Access User Data (Vulnerable)
+                        </button>
+                    </div>
+                    <div id="vuln-access-result" class="result-box vulnerable-result" style="display:none;"></div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🟢 Secure Endpoint (With Authorization)</h3>
+                    <p>Properly checks if you're authorized to access the data</p>
+
+                    <div class="demo-controls">
+                        <input type="number" id="secure-user-id" class="demo-input" placeholder="User ID" value="2">
+                        <button class="demo-button btn-secure" onclick="testAccessControl('secure')">
+                            Access User Data (Secure)
+                        </button>
+                    </div>
+                    <div id="secure-access-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A02: Cryptographic Failures -->
+        <div id="crypto" class="tab-content">
+            <div class="demo-container">
+                <h2>A02:2021 - Cryptographic Failures</h2>
+                <p>Compare plain text vs. hashed password storage</p>
+
+                <div class="demo-section">
+                    <h3>🔴 Vulnerable (Plain Text Password)</h3>
+                    <div class="demo-controls">
+                        <input type="text" id="vuln-username" class="demo-input" placeholder="Username" value="testuser1">
+                        <input type="password" id="vuln-password" class="demo-input" placeholder="Password" value="MyPassword123">
+                        <input type="email" id="vuln-email" class="demo-input" placeholder="Email" value="test1@example.com">
+                        <button class="demo-button btn-vulnerable" onclick="testCrypto('vulnerable')">
+                            Register (Vulnerable)
+                        </button>
+                    </div>
+                    <div id="vuln-crypto-result" class="result-box vulnerable-result" style="display:none;"></div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🟢 Secure (Bcrypt Hashing)</h3>
+                    <div class="demo-controls">
+                        <input type="text" id="secure-username" class="demo-input" placeholder="Username" value="testuser2">
+                        <input type="password" id="secure-password" class="demo-input" placeholder="Password" value="MyPassword123">
+                        <input type="email" id="secure-email" class="demo-input" placeholder="Email" value="test2@example.com">
+                        <button class="demo-button btn-secure" onclick="testCrypto('secure')">
+                            Register (Secure)
+                        </button>
+                    </div>
+                    <div id="secure-crypto-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A03: Injection -->
+        <div id="injection" class="tab-content">
+            <div class="demo-container">
+                <h2>A03:2021 - Injection Attacks</h2>
+
+                <div class="demo-section">
+                    <h3>SQL Injection Demo</h3>
+
+                    <h4>🔴 Vulnerable Login (SQL Injection Possible)</h4>
+                    <div class="warning-box">
+                        <strong>Try these SQL injection attacks:</strong>
+                        <ul>
+                            <li>Username: <code>admin' --</code> (any password)</li>
+                            <li>Username: <code>admin' OR '1'='1' --</code></li>
+                            <li>Username: <code>' OR 1=1 --</code></li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <input type="text" id="vuln-login-user" class="demo-input" placeholder="Username" value="admin' --">
+                        <input type="password" id="vuln-login-pass" class="demo-input" placeholder="Password" value="anything">
+                        <button class="demo-button btn-vulnerable" onclick="testInjection('vulnerable')">
+                            Login (Vulnerable)
+                        </button>
+                    </div>
+                    <div id="vuln-injection-result" class="result-box vulnerable-result" style="display:none;"></div>
+
+                    <h4>🟢 Secure Login (Parameterized Queries)</h4>
+                    <div class="demo-controls">
+                        <input type="text" id="secure-login-user" class="demo-input" placeholder="Username" value="admin' --">
+                        <input type="password" id="secure-login-pass" class="demo-input" placeholder="Password" value="admin123">
+                        <button class="demo-button btn-secure" onclick="testInjection('secure')">
+                            Login (Secure)
+                        </button>
+                    </div>
+                    <div id="secure-injection-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>Command Injection Demo</h3>
+
+                    <h4>🔴 Vulnerable Ping (Command Injection)</h4>
+                    <div class="warning-box">
+                        <strong>Try these command injection attacks:</strong>
+                        <ul>
+                            <li><code>8.8.8.8; ls</code></li>
+                            <li><code>8.8.8.8 && whoami</code></li>
+                            <li><code>8.8.8.8 | cat /etc/passwd</code></li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <input type="text" id="vuln-ping-host" class="demo-input" placeholder="Host to ping" value="8.8.8.8">
+                        <button class="demo-button btn-vulnerable" onclick="testCommandInjection('vulnerable')">
+                            Ping (Vulnerable)
+                        </button>
+                    </div>
+                    <div id="vuln-cmd-result" class="result-box vulnerable-result" style="display:none;"></div>
+
+                    <h4>🟢 Secure Ping (Input Validation)</h4>
+                    <div class="demo-controls">
+                        <input type="text" id="secure-ping-host" class="demo-input" placeholder="Host to ping" value="8.8.8.8; ls">
+                        <button class="demo-button btn-secure" onclick="testCommandInjection('secure')">
+                            Ping (Secure)
+                        </button>
+                    </div>
+                    <div id="secure-cmd-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A04: Insecure Design -->
+        <div id="design" class="tab-content">
+            <div class="demo-container">
+                <h2>A04:2021 - Insecure Design</h2>
+                <p>Business logic vulnerabilities</p>
+
+                <div class="info-box">
+                    <strong>Available Products:</strong>
+                    <div id="products-list">Loading...</div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🔴 Vulnerable Purchase (No Business Logic Validation)</h3>
+                    <div class="warning-box">
+                        <strong>Try exploits:</strong>
+                        <ul>
+                            <li>Negative quantity: <code>-10</code> (you'll get paid instead!)</li>
+                            <li>Excessive quantity: <code>9999</code></li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <select id="vuln-product" class="demo-input">
+                            <option value="1">Security Book ($29.99)</option>
+                            <option value="2">OWASP Guide ($49.99)</option>
+                            <option value="3">Pentesting Tools ($99.99)</option>
+                        </select>
+                        <input type="number" id="vuln-quantity" class="demo-input" placeholder="Quantity" value="-10">
+                        <button class="demo-button btn-vulnerable" onclick="testPurchase('vulnerable')">
+                            Purchase (Vulnerable)
+                        </button>
+                    </div>
+                    <div id="vuln-purchase-result" class="result-box vulnerable-result" style="display:none;"></div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🟢 Secure Purchase (Business Logic Validation)</h3>
+                    <div class="demo-controls">
+                        <select id="secure-product" class="demo-input">
+                            <option value="1">Security Book ($29.99)</option>
+                            <option value="2">OWASP Guide ($49.99)</option>
+                            <option value="3">Pentesting Tools ($99.99)</option>
+                        </select>
+                        <input type="number" id="secure-quantity" class="demo-input" placeholder="Quantity" value="-10">
+                        <button class="demo-button btn-secure" onclick="testPurchase('secure')">
+                            Purchase (Secure)
+                        </button>
+                    </div>
+                    <div id="secure-purchase-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A10: SSRF -->
+        <div id="ssrf" class="tab-content">
+            <div class="demo-container">
+                <h2>A10:2021 - Server-Side Request Forgery (SSRF)</h2>
+
+                <div class="demo-section">
+                    <h3>🔴 Vulnerable URL Fetch</h3>
+                    <div class="warning-box">
+                        <strong>Try these SSRF attacks:</strong>
+                        <ul>
+                            <li><code>http://localhost:3000/api/users</code> (access internal API)</li>
+                            <li><code>http://169.254.169.254/latest/meta-data/</code> (AWS metadata)</li>
+                            <li><code>file:///etc/passwd</code> (local file access)</li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <input type="text" id="vuln-url" class="demo-input" placeholder="URL to fetch" value="http://localhost:3000/api/users" style="flex: 2;">
+                        <button class="demo-button btn-vulnerable" onclick="testSSRF('vulnerable')">
+                            Fetch URL (Vulnerable)
+                        </button>
+                    </div>
+                    <div id="vuln-ssrf-result" class="result-box vulnerable-result" style="display:none;"></div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🟢 Secure URL Fetch (Allowlist)</h3>
+                    <div class="info-box">
+                        <strong>Allowed domains:</strong> example.com, api.example.com
+                    </div>
+                    <div class="demo-controls">
+                        <input type="text" id="secure-url" class="demo-input" placeholder="URL to fetch" value="http://localhost:3000/api/users" style="flex: 2;">
+                        <button class="demo-button btn-secure" onclick="testSSRF('secure')">
+                            Fetch URL (Secure)
+                        </button>
+                    </div>
+                    <div id="secure-ssrf-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Tab -->
+        <div id="info" class="tab-content">
+            <div class="demo-container">
+                <h2>About This Demo</h2>
+
+                <div class="info-box">
+                    <h3>🎓 Learning Objectives</h3>
+                    <p>This interactive demo allows you to:</p>
+                    <ul>
+                        <li>Test real vulnerability exploits in a safe environment</li>
+                        <li>Compare vulnerable vs. secure implementations</li>
+                        <li>See actual attack payloads and their results</li>
+                        <li>Understand how security controls prevent attacks</li>
+                    </ul>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🔧 Utility Controls</h3>
+                    <div class="demo-controls">
+                        <button class="demo-button btn-primary" onclick="resetDemo()">
+                            Reset Demo Data
+                        </button>
+                        <button class="demo-button btn-primary" onclick="loadUsers()">
+                            Refresh User List
+                        </button>
+                        <button class="demo-button btn-primary" onclick="loadProducts()">
+                            Refresh Product List
+                        </button>
+                    </div>
+                </div>
+
+                <div class="warning-box">
+                    <h3>⚠️ Important Disclaimer</h3>
+                    <p>This application contains intentional security vulnerabilities for educational purposes only.</p>
+                    <ul>
+                        <li><strong>DO NOT</strong> deploy this to a production environment</li>
+                        <li><strong>DO NOT</strong> use these vulnerable patterns in real applications</li>
+                        <li><strong>DO NOT</strong> test these attacks on systems you don't own</li>
+                        <li><strong>DO</strong> use this knowledge to build more secure applications</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>⚠️ <strong>Educational Purpose Only</strong> - Never implement vulnerable code in production!</p>
+            <p>Based on <a href="https://owasp.org/www-project-top-ten/" target="_blank">OWASP Top 10 2021</a></p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
