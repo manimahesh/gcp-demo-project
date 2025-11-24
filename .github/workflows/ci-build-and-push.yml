@@ -92,31 +92,28 @@ jobs:
         env:
           REGION: us-central1
 
-      - name: Patch k8s manifest with built image
+      - name: Deploy backend image to GKE (kubectl set image)
         run: |
-          # Prefer the image set by the build job output, but fall back to a computed image
+          set -euo pipefail
+          echo "Installing gke auth plugin"
+          gcloud components install gke-gcloud-auth-plugin || true
+
+          # Determine image to deploy
           IMAGE="${{ needs.build-and-push.outputs.image }}"
-          echo "Raw image from build job output: '$IMAGE'"
-          if [ -z "$IMAGE" ]; then
-            # Fallback: compute the expected image name using REGION and project secret
+          echo "Raw image from build job output: '${IMAGE}'"
+          if [ -z "${IMAGE}" ]; then
             IMAGE="${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest"
-            echo "Build output was empty. Falling back to computed image: $IMAGE"
+            echo "Build output was empty. Falling back to computed image: ${IMAGE}"
           fi
-          if [ -z "$IMAGE" ]; then
-            echo "ERROR: computed image is empty — aborting deploy. Ensure 'GCP_PROJECT' secret is set and build job succeeded." >&2
+          if [ -z "${IMAGE}" ]; then
+            echo "ERROR: image is empty — aborting deploy. Ensure 'GCP_PROJECT' secret is set and build job succeeded." >&2
             exit 1
           fi
-          echo "Original manifest (first 100 lines):"
-          sed -n '1,100p' k8s/backend-deployment.yaml || true
-          echo "Patching k8s/backend-deployment.yaml with image $IMAGE"
-          sed -i "s|REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH|$IMAGE|g" k8s/backend-deployment.yaml
-          echo "Patched manifest (first 100 lines):"
-          sed -n '1,100p' k8s/backend-deployment.yaml || true
 
-      - name: Deploy backend image to GKE
-        run: |
-          gcloud components install gke-gcloud-auth-plugin
-          kubectl apply -f k8s/backend-deployment.yaml
-        env:
-          REGION: us-central1
+          echo "Setting deployment image to: ${IMAGE}"
+          kubectl set image deployment/vuln-backend vuln-backend=${IMAGE} --record
+          echo "Waiting for rollout to complete"
+          kubectl rollout status deployment/vuln-backend --timeout=120s || (kubectl describe deployment vuln-backend && kubectl get pods -o wide && exit 1)
+          echo "Deployment applied. Showing deployment summary:"
+          kubectl get deploy vuln-backend -o wide
  
