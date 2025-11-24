@@ -1,16 +1,15 @@
 {
-  "name": "vuln-demo-backend",
+  "name": "vuln-demo-app",
   "version": "1.0.0",
-  "description": "Backend for vulnerable web app demo",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
-    "node-fetch": "^2.6.7",
-    "jsonwebtoken": "^9.0.0"
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "node-fetch": "^2.6.7"
   }
 }

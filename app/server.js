@@ -9,8 +9,8 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Serve frontend static
-const frontendDir = path.join(__dirname, "..", "frontend");
+// Serve frontend static (index.html lives in the same folder)
+const frontendDir = path.join(__dirname);
 app.use("/", express.static(frontendDir));
 
 // Explicit root handler to ensure index.html is served even if static
@@ -25,21 +25,18 @@ app.get("/", (req, res) => {
 
 // Simple in-memory comment list for XSS demo
 let comments = [];
+
 // In-memory users for demos (replaces sqlite3 usage)
 let users = [
   { id: 1, name: "alice", email: "alice@example.com" },
   { id: 2, name: "bob", email: "bob@example.com" },
 ];
 
-// 1. SQL Injection (vulnerable on purpose)
+// 1. SQL Injection (vulnerable on purpose) - simulated
 app.get("/api/sqli", (req, res) => {
   const name = req.query.name || "";
-  // This endpoint intentionally demonstrates unsafe handling of input.
-  // We simulate SQL injection by returning all users when the input
-  // contains SQL-like operators (e.g. "OR" or a single quote).
   const lowered = name.toLowerCase();
   if (name.includes("'") || lowered.includes(" or ")) {
-    // Simulate injection result
     return res.json(users);
   }
   const rows = users.filter((u) => u.name === name);
@@ -53,18 +50,16 @@ app.post("/api/xss", (req, res) => {
   res.json({ ok: true });
 });
 app.get("/api/xss/comments", (req, res) => {
-  // returns JSON; frontend intentionally renders without escaping
   res.json(comments);
 });
 
-// 3. CSRF demo: naive cookie-based session and change-email with no CSRF token
+// 3. CSRF demo
 const sessions = {};
 app.post("/api/csrf/login", (req, res) => {
   const user = req.body.user || "alice";
   const sid = "sess-" + Math.random().toString(36).slice(2);
   sessions[sid] = { user, email: user + "@example.com" };
-  res.cookie && res.cookie("sid", sid); // if cookie middleware present
-  // also return sid for simplicity
+  res.cookie && res.cookie("sid", sid);
   res.json({ sid });
 });
 app.post("/api/csrf/change-email", (req, res) => {
@@ -96,7 +91,6 @@ app.get("/api/auth/me", (req, res) => {
 // 5. IDOR demo
 app.get("/api/idor/user/:id", (req, res) => {
   const id = req.params.id;
-  // no authorization check - returns any user (IDOR demo)
   const row = users.find((u) => String(u.id) === String(id));
   if (!row) return res.status(404).send("Not found");
   res.json(row);
@@ -104,8 +98,6 @@ app.get("/api/idor/user/:id", (req, res) => {
 
 // 6. IAM / Over-privileged demo (simulated)
 app.post("/api/iam/do", (req, res) => {
-  // In a real deployed demo this would use a service account with wide permissions.
-  // Here we just echo the requested action and warn.
   const resource =
     req.body.resource ||
     req.query.resource ||
@@ -114,15 +106,14 @@ app.post("/api/iam/do", (req, res) => {
     ok: true,
     action: "access",
     resource,
-    note: "Simulated over-privileged access. In real environments this could expose resources.",
+    note: "Simulated over-privileged access.",
   });
 });
 
-// 7. Vulnerable dependencies: show package.json and a simulated audit
+// 7. Vulnerable dependencies
 app.get("/api/vuln-deps", (req, res) => {
   const pkg = require("./package.json");
   const deps = pkg.dependencies || {};
-  // Simulated audit result (do not include exploit code)
   const simulated = Object.keys(deps).map((d) => ({
     name: d,
     version: deps[d],
@@ -173,18 +164,14 @@ app.get("/api/ssrf", async (req, res) => {
   }
 });
 
-// Health check for Kubernetes liveness/readiness probes
-app.get("/healthz", (req, res) => {
-  res.status(200).send("ok");
-});
+// Health check
+app.get("/healthz", (req, res) => res.status(200).send("ok"));
 
-// small helper to return raw text for many API responses in frontend
 app.use((req, res, next) => {
   res.setHeader("X-Demo", "vuln-demo");
   next();
 });
 
-// Start server
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log("Demo backend listening on", port));
 console.log("Frontend static directory:", frontendDir);

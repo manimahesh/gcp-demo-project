@@ -10,7 +10,7 @@ WARNING: This project is intentionally vulnerable. Run only in an isolated test 
 - Start locally from the repo root:
 
 ```pwsh
-cd backend
+cd app
 npm ci
 npm start
 ```
@@ -25,7 +25,7 @@ npm start
 
 ```pwsh
 # build (from repo root so frontend is included)
-docker build -f backend/Dockerfile -t vuln-backend:local .
+docker build -f app/Dockerfile -t vuln-backend:local .
 # run
 docker run --rm -p 8080:8080 vuln-backend:local
 ```
@@ -46,7 +46,7 @@ pwsh ./provision_gcp.sh --project YOUR_PROJECT_ID --region us-central1
 # after provisioning, either run CI or push image manually
 # authenticate gcloud then build & push
 gcloud auth configure-docker us-central1-docker.pkg.dev
-docker build -f backend/Dockerfile -t us-central1-docker.pkg.dev/YOUR_PROJECT_ID/vuln-demo-repo/backend:latest .
+docker build -f app/Dockerfile -t us-central1-docker.pkg.dev/YOUR_PROJECT_ID/vuln-demo-repo/backend:latest .
 docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/vuln-demo-repo/backend:latest
 ```
 
