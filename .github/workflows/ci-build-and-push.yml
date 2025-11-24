@@ -70,15 +70,15 @@ jobs:
         env:
           REGION: us-central1
 
-      - name: Deploy backend image to GKE (kubectl set image)
+      - name: Deploy backend using manifest
         run: |
           set -euo pipefail
           echo "Installing gke auth plugin"
           gcloud components install gke-gcloud-auth-plugin || true
 
-          # Determine image to deploy
-          IMAGE="${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest"
-          echo "Raw image from build job output: '${IMAGE}'"
+          # Prefer the image from the set-image step; fall back to computed name
+          IMAGE="${{ steps.set-image.outputs.image }}"
+          echo "Image from build step: '${IMAGE}'"
           if [ -z "${IMAGE}" ]; then
             IMAGE="${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest"
             echo "Build output was empty. Falling back to computed image: ${IMAGE}"
@@ -88,8 +88,17 @@ jobs:
             exit 1
           fi
 
-          echo "Setting deployment image to: ${IMAGE}"
-          kubectl set image deployment/vuln-backend vuln-backend=${IMAGE} --record
+          echo "Original manifest (first 100 lines):"
+          sed -n '1,100p' k8s/backend-deployment.yaml || true
+
+          echo "Patching k8s/backend-deployment.yaml with image $IMAGE"
+          sed -i "s|REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH|$IMAGE|g" k8s/backend-deployment.yaml
+
+          echo "Patched manifest (first 100 lines):"
+          sed -n '1,200p' k8s/backend-deployment.yaml || true
+
+          echo "Applying manifest"
+          kubectl apply -f k8s/backend-deployment.yaml
           echo "Waiting for rollout to complete"
           kubectl rollout status deployment/vuln-backend --timeout=120s || (kubectl describe deployment vuln-backend && kubectl get pods -o wide && exit 1)
           echo "Deployment applied. Showing deployment summary:"

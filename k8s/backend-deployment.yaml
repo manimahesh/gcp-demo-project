@@ -18,7 +18,7 @@ spec:
         - name: vuln-backend
           # Replace REGION and PROJECT with your Artifact Registry values, e.g.
           # us-central1-docker.pkg.dev/your-project/vuln-demo-repo/backend:latest
-          image: "us-central1-docker.pkg.dev/prod-le9fxx2ruhbc/vuln-demo-repo/backend:latest"
+          image: "REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH"
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
