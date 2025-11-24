@@ -2,6 +2,12 @@
 
 # Documentation
 README.md
+QUICKSTART.md
+TROUBLESHOOTING.md
+
+# Node modules (will be installed during build)
+node_modules
+npm-debug.log*
 
 # Git
 .git
@@ -13,11 +19,20 @@ README.md
 *.swp
 *.swo
 *~
+.DS_Store
 
 # OS
-.DS_Store
 Thumbs.db
+
+# Scripts (not needed in container)
+run-docker.sh
+run-docker.bat
 
 # Logs
 *.log
-npm-debug.log*
+logs/
+
+# Test files
+test/
+*.test.js
+coverage/
