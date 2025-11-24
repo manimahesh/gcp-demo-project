@@ -1,27 +1,20 @@
 # Multi-stage Dockerfile: build native modules in a builder stage, copy artifacts to final image
 # Use a Debian-based builder to simplify native module compilation
-FROM node:18-bullseye-slim AS builder
+# Builder stage: no native build deps needed since sqlite3 was removed
+FROM node:18 AS builder
 WORKDIR /usr/src/app
 
-# Install build dependencies for native modules
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    build-essential \
-    libsqlite3-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy package files and install production deps, forcing sqlite3 to build from source
+# Copy package files and install production deps
 COPY backend/package.json backend/package-lock.json* ./
-RUN npm install
-RUN npm ci --production --silent --no-audit --no-fund --build-from-source=sqlite3
+# Prefer npm ci when lockfile is present, fall back to npm install
+RUN npm ci --production --silent --no-audit --no-fund || npm install --production --silent --no-audit --no-fund
 
 # Copy backend source and frontend static files into builder (so native modules are present)
 COPY backend/ ./
 COPY frontend/ /usr/src/frontend/
 
 # Final image: copy runtime files only
-FROM node:18-bullseye-slim
+FROM node:18
 WORKDIR /usr/src/app
 
 # Set production environment

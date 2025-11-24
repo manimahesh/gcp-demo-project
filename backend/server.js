@@ -1,7 +1,6 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const sqlite3 = require("sqlite3").verbose();
 const fetch = require("node-fetch");
 const jwt = require("jsonwebtoken");
 const path = require("path");
@@ -15,29 +14,25 @@ app.use("/", express.static(path.join(__dirname, "..", "frontend")));
 
 // Simple in-memory comment list for XSS demo
 let comments = [];
-
-// Initialize SQLite DB for SQLi demo
-const db = new sqlite3.Database(":memory:");
-db.serialize(() => {
-  db.run(
-    "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT)"
-  );
-  const stmt = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
-  stmt.run("alice", "alice@example.com");
-  stmt.run("bob", "bob@example.com");
-  stmt.finalize();
-});
+// In-memory users for demos (replaces sqlite3 usage)
+let users = [
+  { id: 1, name: "alice", email: "alice@example.com" },
+  { id: 2, name: "bob", email: "bob@example.com" },
+];
 
 // 1. SQL Injection (vulnerable on purpose)
 app.get("/api/sqli", (req, res) => {
   const name = req.query.name || "";
-  // Vulnerable concatenated SQL (for demo only)
-  const sql = `SELECT id, name, email FROM users WHERE name = '${name}'`;
-  db.all(sql, (err, rows) => {
-    if (err)
-      return res.status(500).send("DB error: " + err.message + "\n\n" + sql);
-    res.json(rows);
-  });
+  // This endpoint intentionally demonstrates unsafe handling of input.
+  // We simulate SQL injection by returning all users when the input
+  // contains SQL-like operators (e.g. "OR" or a single quote).
+  const lowered = name.toLowerCase();
+  if (name.includes("'") || lowered.includes(" or ")) {
+    // Simulate injection result
+    return res.json(users);
+  }
+  const rows = users.filter((u) => u.name === name);
+  res.json(rows);
 });
 
 // 2. XSS demo: post and get comments (no output encoding)
@@ -90,12 +85,10 @@ app.get("/api/auth/me", (req, res) => {
 // 5. IDOR demo
 app.get("/api/idor/user/:id", (req, res) => {
   const id = req.params.id;
-  // no authorization check - returns any user
-  db.get(`SELECT id, name, email FROM users WHERE id = ${id}`, (err, row) => {
-    if (err) return res.status(500).send(err.message);
-    if (!row) return res.status(404).send("Not found");
-    res.json(row);
-  });
+  // no authorization check - returns any user (IDOR demo)
+  const row = users.find((u) => String(u.id) === String(id));
+  if (!row) return res.status(404).send("Not found");
+  res.json(row);
 });
 
 // 6. IAM / Over-privileged demo (simulated)
