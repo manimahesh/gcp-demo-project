@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vuln-backend
+  labels:
+    app: vuln-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vuln-backend
+  template:
+    metadata:
+      labels:
+        app: vuln-backend
+    spec:
+      containers:
+        - name: vuln-backend
+          # Replace REGION and PROJECT with your Artifact Registry values, e.g.
+          # us-central1-docker.pkg.dev/your-project/vuln-demo-repo/backend:latest
+          image: "REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          # Recommended security best-practices for production demos:
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # Basic resource requests/limits to avoid noisy-neighbor problems
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vuln-backend-svc
+spec:
+  selector:
+    app: vuln-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

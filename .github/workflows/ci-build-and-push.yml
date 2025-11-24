@@ -1,0 +1,99 @@
+name: Build and Push
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      REGION: us-central1
+    outputs:
+      image: ${{ steps.set-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+          install_kubectl: false
+
+      - name: Configure Docker
+        run: |
+          gcloud --quiet auth configure-docker ${REGION}-docker.pkg.dev
+        env:
+          REGION: us-central1
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest backend/
+        env:
+          REGION: us-central1
+
+      - name: Push Docker image
+        run: |
+          docker push ${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest
+        env:
+          REGION: us-central1
+
+      - name: Run Trivy scan (optional)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL ${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest
+        env:
+          REGION: us-central1
+
+      - name: Set image output
+        id: set-image
+        run: |
+          echo "image=${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest" >> $GITHUB_OUTPUT
+        env:
+          REGION: us-central1
+
+  deploy:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Setup gcloud and kubectl
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+          install_kubectl: true
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} --region ${REGION} --project ${{ secrets.GCP_PROJECT }}
+        env:
+          REGION: us-central1
+
+      - name: Patch k8s manifest with built image
+        run: |
+          echo "Patching k8s/backend-deployment.yaml with image ${{ needs.build-and-push.outputs.image }}"
+          sed -i "s|REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH|${{ needs.build-and-push.outputs.image }}|g" k8s/backend-deployment.yaml
+
+      - name: Deploy backend image to GKE
+        run: |
+          kubectl apply -f k8s/backend-deployment.yaml
+        env:
+          REGION: us-central1
+ 

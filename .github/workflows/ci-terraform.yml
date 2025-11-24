@@ -1,0 +1,35 @@
+name: Terraform CI
+
+on:
+    pull_request:
+        paths:
+            - "terraform/**"
+
+permissions:
+    contents: read
+    id-token: write
+
+jobs:
+    terraform:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v2
+              with:
+                  terraform_version: 1.5.0
+
+            - name: Authenticate to GCP (OIDC)
+              uses: google-github-actions/auth@v1
+              with:
+                  workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+                  service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+            - name: Terraform Init
+              working-directory: terraform
+              run: terraform init
+
+            - name: Terraform Plan
+              working-directory: terraform
+              run: terraform plan -var="project_id=${{ secrets.GCP_PROJECT }}" -var="region=us-central1"
