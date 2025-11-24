@@ -79,7 +79,7 @@ jobs:
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       - name: Setup gcloud and kubectl
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
           install_kubectl: true
@@ -97,6 +97,7 @@ jobs:
 
       - name: Deploy backend image to GKE
         run: |
+          gcloud components install gke-gcloud-auth-plugin
           kubectl apply -f k8s/backend-deployment.yaml
         env:
           REGION: us-central1
