@@ -41,8 +41,8 @@ jobs:
 
       - name: Build Docker image
         run: |
-          # Build from repository root so frontend static files are included; Dockerfile is in app/
-          docker build -f app/Dockerfile -t ${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest .
+          # Build from app directory where Dockerfile and all application files are located
+          docker build -t ${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/vuln-demo-repo/backend:latest app/
         env:
           REGION: us-central1
 
