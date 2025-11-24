@@ -45,20 +45,41 @@ async function apiCall(endpoint, method = 'GET', body = null) {
     }
 
     try {
+        console.log(`[API Call] ${method} ${endpoint}`, body ? body : '');
         const response = await fetch(endpoint, options);
-        return await response.json();
+        console.log(`[API Response] Status: ${response.status}`);
+
+        const data = await response.json();
+        console.log(`[API Data]`, data);
+        return data;
     } catch (error) {
-        return { error: error.message };
+        console.error(`[API Error] ${method} ${endpoint}:`, error);
+        return {
+            error: error.message,
+            apiError: true,
+            endpoint: endpoint
+        };
     }
 }
 
 function displayResult(elementId, data, isVulnerable = true) {
+    console.log(`[Display] Showing result in ${elementId}`, data);
+
     const element = document.getElementById(elementId);
+
+    if (!element) {
+        console.error(`[Display Error] Element not found: ${elementId}`);
+        alert(`Error: Could not find result display element (${elementId})`);
+        return;
+    }
+
     element.style.display = 'block';
     element.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
 
     // Scroll into view
     element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    console.log(`[Display] Result displayed successfully`);
 }
 
 // ====================================================================================
@@ -135,12 +156,18 @@ async function testAccessControl(type) {
 // ====================================================================================
 
 async function testCrypto(type) {
+    console.log(`[testCrypto] Starting test for type: ${type}`);
+
     const username = document.getElementById(`${type}-username`).value;
     const password = document.getElementById(`${type}-password`).value;
     const email = document.getElementById(`${type}-email`).value;
 
+    console.log(`[testCrypto] Input values:`, { username, password: '***', email });
+
     const endpoint = `/api/${type}/register`;
     const resultId = `${type}-crypto-result`;
+
+    console.log(`[testCrypto] Calling API: ${endpoint}, result div: ${resultId}`);
 
     const data = await apiCall(endpoint, 'POST', { username, password, email });
     displayResult(resultId, data, type === 'vulnerable');
