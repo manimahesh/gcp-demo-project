@@ -30,7 +30,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
-          install_components: false
+          install_components: gke-gcloud-auth-plugin, docker-credential-gcr
 
       - name: Configure Docker
         run: |
