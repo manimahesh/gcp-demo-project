@@ -65,4 +65,7 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8080
-  type: ClusterIP
+  type: LoadBalancer
+  # For GKE the default external load balancer will be provisioned. To restrict
+  # sources, add `loadBalancerSourceRanges: ['1.2.3.4/32']` or similar.
+  # Optionally add annotations for specific LB types/providers here.

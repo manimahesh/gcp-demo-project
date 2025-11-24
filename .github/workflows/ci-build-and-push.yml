@@ -95,3 +95,9 @@ jobs:
           echo "Deployment applied. Showing deployment summary:"
           kubectl get deploy vuln-backend -o wide
  
+      - name: Print External IP for Service
+        run: |
+          echo "Waiting for LoadBalancer external IP for vuln-backend-svc..."
+          chmod +x scripts/print_external_ip.sh
+          ./scripts/print_external_ip.sh || true
+
