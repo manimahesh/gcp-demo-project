@@ -92,8 +92,18 @@ jobs:
 
       - name: Patch k8s manifest with built image
         run: |
-          echo "Patching k8s/backend-deployment.yaml with image ${{ needs.build-and-push.outputs.image }}"
-          sed -i "s|REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH|${{ needs.build-and-push.outputs.image }}|g" k8s/backend-deployment.yaml
+          IMAGE="${{ needs.build-and-push.outputs.image }}"
+          echo "Image to deploy: $IMAGE"
+          if [ -z "$IMAGE" ]; then
+            echo "ERROR: built image is empty — aborting deploy. Check build job outputs and logs." >&2
+            exit 1
+          fi
+          echo "Original manifest (first 100 lines):"
+          sed -n '1,100p' k8s/backend-deployment.yaml || true
+          echo "Patching k8s/backend-deployment.yaml with image $IMAGE"
+          sed -i "s|REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH|$IMAGE|g" k8s/backend-deployment.yaml
+          echo "Patched manifest (first 100 lines):"
+          sed -n '1,100p' k8s/backend-deployment.yaml || true
 
       - name: Deploy backend image to GKE
         run: |
