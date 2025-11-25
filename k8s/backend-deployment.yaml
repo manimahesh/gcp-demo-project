@@ -38,7 +38,7 @@ spec:
             - name: DB_USER
               value: "vulnuser"
             - name: DB_PASSWORD
-              value: "REPLACE_WITH_DB_PASSWORD"  # Update after running provision script
+              value: "@Panw@Panw123"  # Update after running provision script
           # Recommended security best-practices for production demos:
           securityContext:
             runAsUser: 1000
