@@ -11,78 +11,117 @@
 }
 
 :root {
-    /* Color Palette */
-    --primary-color: #2c3e50;
-    --secondary-color: #3498db;
-    --accent-color: #e74c3c;
-    --success-color: #27ae60;
-    --warning-color: #f39c12;
-    --danger-color: #e74c3c;
-    --text-color: #333;
-    --text-light: #666;
-    --background: #f8f9fa;
+    /* Modern Color Palette - Enhanced vibrancy */
+    --primary-color: #1a202c;
+    --primary-light: #2d3748;
+    --secondary-color: #3182ce;
+    --secondary-light: #4299e1;
+    --accent-color: #e53e3e;
+    --success-color: #38a169;
+    --success-light: #48bb78;
+    --warning-color: #ed8936;
+    --danger-color: #e53e3e;
+    --danger-light: #fc8181;
+    --text-color: #2d3748;
+    --text-light: #718096;
+    --text-lighter: #a0aec0;
+    --background: #f7fafc;
     --card-background: #ffffff;
-    --code-background: #f5f5f5;
-    --border-color: #dee2e6;
+    --code-background: #edf2f7;
+    --border-color: #e2e8f0;
 
-    /* Spacing */
+    /* Spacing - Refined scale */
     --spacing-xs: 0.5rem;
     --spacing-sm: 1rem;
     --spacing-md: 1.5rem;
     --spacing-lg: 2rem;
     --spacing-xl: 3rem;
+    --spacing-2xl: 4rem;
 
-    /* Typography */
-    --font-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    --font-code: 'Consolas', 'Monaco', 'Courier New', monospace;
+    /* Typography - Enhanced hierarchy */
+    --font-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    --font-code: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', 'Source Code Pro', 'Consolas', 'Courier New', monospace;
 
-    /* Shadows */
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.15);
+    /* Modern Shadows - Layered depth */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
-    /* Transitions */
-    --transition: all 0.3s ease;
+    /* Glass morphism */
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.18);
+
+    /* Transitions - Refined timing */
+    --transition-fast: all 0.15s ease;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
     font-family: var(--font-primary);
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    background-attachment: fixed;
     color: var(--text-color);
     line-height: 1.6;
     min-height: 100vh;
     padding: var(--spacing-md);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Container */
+/* Container - Modern card design */
 .container {
     max-width: 1200px;
     margin: 0 auto;
     background: var(--background);
-    border-radius: 12px;
-    box-shadow: var(--shadow-lg);
+    border-radius: 20px;
+    box-shadow: var(--shadow-2xl);
     overflow: hidden;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
-/* Header */
+/* Header - Enhanced with modern gradient */
 header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 50%, #4a5568 100%);
     color: white;
     padding: var(--spacing-xl) var(--spacing-lg);
     text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, transparent 0%, rgba(102, 126, 234, 0.1) 100%);
+    pointer-events: none;
 }
 
 header h1 {
     font-size: 2.5rem;
-    font-weight: 700;
+    font-weight: 800;
     margin-bottom: var(--spacing-sm);
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.5px;
+    position: relative;
+    z-index: 1;
 }
 
 .subtitle {
     font-size: 1.1rem;
-    opacity: 0.9;
-    font-weight: 300;
+    opacity: 0.95;
+    font-weight: 400;
+    position: relative;
+    z-index: 1;
+    color: rgba(255, 255, 255, 0.9);
 }
 
 /* Carousel Container */
@@ -497,16 +536,101 @@ html {
     scroll-behavior: smooth;
 }
 
-/* Loading animation */
+/* Loading animation - Enhanced */
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
+        transform: scale(1);
     }
     50% {
         opacity: 0.5;
+        transform: scale(0.98);
     }
 }
 
 .loading {
-    animation: pulse 2s infinite;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Modern button enhancements */
+button {
+    position: relative;
+    overflow: hidden;
+    transform: translateZ(0);
+}
+
+button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+button:active::before {
+    width: 300px;
+    height: 300px;
+}
+
+/* Enhanced focus states for accessibility */
+*:focus {
+    outline: none;
+}
+
+*:focus-visible {
+    outline: 3px solid var(--secondary-color);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Smooth transitions for all interactive elements */
+a, button, input, select, textarea {
+    transition: var(--transition);
+}
+
+/* Enhanced card hover effects */
+.demo-container {
+    transition: var(--transition);
+}
+
+.demo-container:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Modern scrollbar styling */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--code-background);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 10px;
+    border: 2px solid var(--code-background);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-light);
+}
+
+/* Selection styling */
+::selection {
+    background: var(--secondary-color);
+    color: white;
+}
+
+::-moz-selection {
+    background: var(--secondary-color);
+    color: white;
 }
