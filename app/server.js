@@ -12,6 +12,7 @@ const session = require('express-session');
 const path = require('path');
 const { exec } = require('child_process');
 const crypto = require('crypto');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -531,6 +532,158 @@ app.post('/api/reset', (req, res) => {
 
     req.session.destroy();
     res.json({ message: 'Demo data reset successfully' });
+});
+
+// ====================================================================================
+// A08:2021 - Software and Data Integrity Failures (Cloud Storage Misconfiguration)
+// Demonstrates: Publicly accessible cloud storage bucket with PII data
+// ====================================================================================
+
+// Vulnerable: Simulates publicly accessible storage bucket (no authentication)
+app.get('/api/vulnerable/storage/customer-data', (req, res) => {
+    const csvPath = path.join(__dirname, 'data', 'customer_pii.csv');
+
+    // VULNERABLE: No authentication or authorization checks!
+    // This simulates a publicly accessible GCS bucket
+    fs.readFile(csvPath, 'utf8', (err, data) => {
+        if (err) {
+            return res.status(500).json({
+                error: 'Failed to read file',
+                details: err.message
+            });
+        }
+
+        const lines = data.trim().split('\n');
+        const headers = lines[0].split(',');
+        const records = lines.slice(1).map(line => {
+            const values = line.split(',');
+            const record = {};
+            headers.forEach((header, index) => {
+                record[header] = values[index];
+            });
+            return record;
+        });
+
+        res.json({
+            vulnerability: 'Insecure Cloud Storage',
+            issue: 'Publicly accessible storage bucket with PII data!',
+            warning: 'Anyone on the internet can access this sensitive data!',
+            bucket_url: 'gs://my-company-customer-data/customer_pii.csv',
+            public_access: true,
+            authentication_required: false,
+            encryption_at_rest: false,
+            total_records: records.length,
+            exposed_pii_fields: ['ssn', 'credit_card', 'date_of_birth', 'phone', 'address'],
+            data_sample: records.slice(0, 5), // Show first 5 records
+            all_data_accessible: true,
+            compliance_violations: ['GDPR', 'HIPAA', 'PCI-DSS', 'CCPA'],
+            risk_level: 'CRITICAL',
+            remediation: 'Use IAM policies, bucket ACLs, signed URLs, and enable encryption'
+        });
+    });
+});
+
+// Secure: Simulates proper cloud storage access control
+app.get('/api/secure/storage/customer-data', (req, res) => {
+    const authHeader = req.headers.authorization;
+
+    // Check for authentication token
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Valid authentication token required',
+            security_measures: [
+                'Authentication required',
+                'IAM-based access control',
+                'Signed URLs with expiration',
+                'Encryption at rest and in transit'
+            ]
+        });
+    }
+
+    const token = authHeader.substring(7);
+
+    // Validate token (simplified for demo)
+    if (token !== 'valid-access-token-12345') {
+        return res.status(403).json({
+            error: 'Forbidden',
+            message: 'Invalid or expired token',
+            required_permissions: [
+                'storage.objects.get',
+                'storage.buckets.get'
+            ]
+        });
+    }
+
+    // Check if user has required IAM role
+    const userRole = req.headers['x-user-role'];
+    const allowedRoles = ['storage.objectViewer', 'storage.admin', 'roles/dataAccess'];
+
+    if (!userRole || !allowedRoles.includes(userRole)) {
+        return res.status(403).json({
+            error: 'Forbidden',
+            message: 'Insufficient permissions',
+            required_roles: allowedRoles,
+            current_role: userRole || 'none'
+        });
+    }
+
+    const csvPath = path.join(__dirname, 'data', 'customer_pii.csv');
+
+    fs.readFile(csvPath, 'utf8', (err, data) => {
+        if (err) {
+            return res.status(500).json({
+                error: 'Failed to read file',
+                details: err.message
+            });
+        }
+
+        const lines = data.trim().split('\n');
+        const headers = lines[0].split(',');
+
+        // Redact sensitive fields for non-admin users
+        const shouldRedact = userRole !== 'storage.admin';
+        const records = lines.slice(1).map(line => {
+            const values = line.split(',');
+            const record = {};
+            headers.forEach((header, index) => {
+                if (shouldRedact && ['ssn', 'credit_card'].includes(header)) {
+                    record[header] = '***REDACTED***';
+                } else {
+                    record[header] = values[index];
+                }
+            });
+            return record;
+        });
+
+        res.json({
+            message: 'Secure access to cloud storage',
+            security_controls: {
+                authentication: 'Token-based (OAuth 2.0 / Service Account)',
+                authorization: 'IAM Role-Based Access Control',
+                encryption_at_rest: 'Google-managed or Customer-managed encryption keys',
+                encryption_in_transit: 'TLS 1.3',
+                bucket_access: 'Private (uniform bucket-level access)',
+                audit_logging: 'Cloud Audit Logs enabled',
+                versioning: 'Object versioning enabled',
+                lifecycle_policy: 'Auto-delete after 90 days'
+            },
+            access_granted: true,
+            user_role: userRole,
+            data_redacted: shouldRedact,
+            total_records: records.length,
+            data_sample: records.slice(0, 5),
+            best_practices: [
+                'Use IAM conditions for fine-grained access',
+                'Enable uniform bucket-level access',
+                'Use signed URLs with short expiration',
+                'Enable VPC Service Controls',
+                'Implement DLP (Data Loss Prevention)',
+                'Regular access reviews and audits',
+                'Use customer-managed encryption keys (CMEK)'
+            ]
+        });
+    });
 });
 
 // ====================================================================================

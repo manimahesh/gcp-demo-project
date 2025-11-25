@@ -222,6 +222,66 @@ async function testPurchase(type) {
 }
 
 // ====================================================================================
+// A08: Cloud Storage Misconfiguration Tests
+// ====================================================================================
+
+async function testStorage(type) {
+    // Use abbreviated 'vuln' for vulnerable element IDs
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const resultId = `${idPrefix}-storage-result`;
+
+    const endpoint = `/api/${type}/storage/customer-data`;
+
+    if (type === 'secure') {
+        const token = document.getElementById('secure-storage-token').value;
+        const role = document.getElementById('secure-storage-role').value;
+
+        if (!token) {
+            displayResult(resultId, {
+                error: 'Missing token',
+                message: 'Please provide an authorization token'
+            }, false);
+            return;
+        }
+
+        if (!role) {
+            displayResult(resultId, {
+                error: 'Missing role',
+                message: 'Please select an IAM role'
+            }, false);
+            return;
+        }
+
+        // Make custom fetch call with headers
+        try {
+            console.log(`[Storage Test] Calling ${endpoint} with token and role ${role}`);
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-User-Role': role,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+            console.log(`[Storage Test] Response:`, data);
+            displayResult(resultId, data, type === 'vulnerable');
+        } catch (error) {
+            console.error(`[Storage Test] Error:`, error);
+            displayResult(resultId, {
+                error: error.message,
+                apiError: true
+            }, false);
+        }
+    } else {
+        // Vulnerable endpoint - no auth required
+        const data = await apiCall(endpoint, 'GET');
+        displayResult(resultId, data, type === 'vulnerable');
+    }
+}
+
+// ====================================================================================
 // A10: SSRF Tests
 // ====================================================================================
 

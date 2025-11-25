@@ -1,0 +1,21 @@
+customer_id,first_name,last_name,email,phone,ssn,date_of_birth,address,credit_card,account_balance
+1001,John,Smith,john.smith@email.com,555-0101,123-45-6789,1985-03-15,"123 Main St, New York, NY 10001",4532-1234-5678-9012,15420.50
+1002,Sarah,Johnson,sarah.j@email.com,555-0102,234-56-7890,1990-07-22,"456 Oak Ave, Los Angeles, CA 90001",5412-2345-6789-0123,8930.75
+1003,Michael,Williams,m.williams@email.com,555-0103,345-67-8901,1978-11-08,"789 Pine Rd, Chicago, IL 60601",4716-3456-7890-1234,22100.00
+1004,Emily,Brown,emily.brown@email.com,555-0104,456-78-9012,1995-01-30,"321 Elm St, Houston, TX 77001",5512-4567-8901-2345,3245.20
+1005,David,Jones,david.jones@email.com,555-0105,567-89-0123,1982-09-14,"654 Maple Dr, Phoenix, AZ 85001",4916-5678-9012-3456,18765.90
+1006,Jessica,Garcia,jgarcia@email.com,555-0106,678-90-1234,1988-05-25,"987 Cedar Ln, Philadelphia, PA 19019",5310-6789-0123-4567,6543.30
+1007,Robert,Martinez,r.martinez@email.com,555-0107,789-01-2345,1975-12-03,"147 Birch Way, San Antonio, TX 78201",4024-7890-1234-5678,31200.45
+1008,Linda,Rodriguez,linda.r@email.com,555-0108,890-12-3456,1992-08-17,"258 Spruce Ct, San Diego, CA 92101",3782-8901-2345-6789,9876.60
+1009,William,Hernandez,w.hernandez@email.com,555-0109,901-23-4567,1980-04-21,"369 Walnut Blvd, Dallas, TX 75201",6011-9012-3456-7890,12543.85
+1010,Maria,Lopez,maria.lopez@email.com,555-0110,012-34-5678,1987-10-09,"741 Cherry Ave, San Jose, CA 95101",3714-0123-4567-8901,27890.10
+1011,James,Gonzalez,jgonzalez@email.com,555-0111,123-45-6780,1993-02-28,"852 Ash St, Austin, TX 78701",5105-1234-5678-9012,4567.25
+1012,Patricia,Wilson,p.wilson@email.com,555-0112,234-56-7891,1979-06-12,"963 Poplar Rd, Jacksonville, FL 32099",4111-2345-6789-0123,19234.70
+1013,Christopher,Anderson,c.anderson@email.com,555-0113,345-67-8902,1991-11-19,"159 Hickory Ln, Fort Worth, TX 76101",4573-3456-7890-1234,8901.40
+1014,Nancy,Thomas,nancy.t@email.com,555-0114,456-78-9013,1984-03-07,"357 Sycamore Dr, Columbus, OH 43085",5466-4567-8901-2345,16789.55
+1015,Daniel,Taylor,d.taylor@email.com,555-0115,567-89-0124,1989-07-31,"753 Magnolia Ct, Charlotte, NC 28201",4844-5678-9012-3456,11234.90
+1016,Betty,Moore,betty.moore@email.com,555-0116,678-90-1235,1977-09-23,"951 Willow Way, San Francisco, CA 94102",5578-6789-0123-4567,29876.15
+1017,Matthew,Jackson,m.jackson@email.com,555-0117,789-01-2346,1994-01-16,"159 Dogwood Blvd, Indianapolis, IN 46201",4821-7890-1234-5678,7654.80
+1018,Dorothy,White,dorothy.w@email.com,555-0118,890-12-3457,1981-05-04,"357 Redwood Ave, Seattle, WA 98101",3056-8901-2345-6789,21345.60
+1019,Anthony,Harris,anthony.h@email.com,555-0119,901-23-4568,1986-12-11,"753 Cypress St, Denver, CO 80201",6221-9012-3456-7890,5432.95
+1020,Karen,Martin,karen.martin@email.com,555-0120,012-34-5679,1996-08-26,"951 Sequoia Rd, Boston, MA 02101",5424-0123-4567-8901,14567.35

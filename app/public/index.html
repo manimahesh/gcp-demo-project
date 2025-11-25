@@ -177,6 +177,7 @@
             <button class="tab" onclick="showTab('crypto')">Cryptography</button>
             <button class="tab" onclick="showTab('injection')">Injection</button>
             <button class="tab" onclick="showTab('design')">Insecure Design</button>
+            <button class="tab" onclick="showTab('storage')">Cloud Storage</button>
             <button class="tab" onclick="showTab('ssrf')">SSRF</button>
             <button class="tab" onclick="showTab('info')">Info</button>
         </div>
@@ -371,6 +372,108 @@
                         </button>
                     </div>
                     <div id="secure-purchase-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A08: Cloud Storage Misconfiguration (GCP Bucket) -->
+        <div id="storage" class="tab-content">
+            <div class="demo-container">
+                <h2>A08:2021 - Software and Data Integrity Failures</h2>
+                <h3>Cloud Storage Misconfiguration - Publicly Accessible PII Data</h3>
+                <p>Demonstrates the risk of misconfigured cloud storage buckets exposing sensitive customer data</p>
+
+                <div class="demo-section">
+                    <h4>🔴 Vulnerable: Public GCS Bucket</h4>
+                    <div class="warning-box">
+                        <strong>💀 CRITICAL SECURITY RISK</strong>
+                        <p>This bucket is publicly accessible without any authentication. Anyone with the URL can access all 20 customer records containing:</p>
+                        <ul>
+                            <li>Social Security Numbers (SSN)</li>
+                            <li>Credit Card Numbers</li>
+                            <li>Dates of Birth</li>
+                            <li>Phone Numbers and Addresses</li>
+                            <li>Account Balances</li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <button class="demo-button btn-vulnerable" onclick="testStorage('vulnerable')">
+                            🔓 Access Public Bucket (No Auth Required)
+                        </button>
+                    </div>
+                    <div id="vuln-storage-result" class="result-box vulnerable-result" style="display:none;"></div>
+                </div>
+
+                <div class="demo-section">
+                    <h4>🟢 Secure: IAM-Protected Storage with Encryption</h4>
+                    <div class="info-box">
+                        <strong>✅ Security Best Practices</strong>
+                        <ul>
+                            <li><strong>Authentication:</strong> OAuth 2.0 / Service Account tokens required</li>
+                            <li><strong>Authorization:</strong> IAM role-based access control</li>
+                            <li><strong>Encryption:</strong> Data encrypted at rest and in transit</li>
+                            <li><strong>Audit Logging:</strong> All access attempts logged</li>
+                            <li><strong>Data Redaction:</strong> Sensitive fields hidden for non-admin users</li>
+                            <li><strong>Signed URLs:</strong> Time-limited access with automatic expiration</li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <label>
+                            <strong>Authorization Token:</strong>
+                            <input type="text" id="secure-storage-token" class="demo-input" placeholder="Bearer token" value="valid-access-token-12345" style="flex: 2;">
+                        </label>
+                        <label>
+                            <strong>IAM Role:</strong>
+                            <select id="secure-storage-role" class="demo-input">
+                                <option value="">-- Select Role --</option>
+                                <option value="storage.objectViewer">storage.objectViewer (Redacted)</option>
+                                <option value="storage.admin">storage.admin (Full Access)</option>
+                                <option value="roles/dataAccess">roles/dataAccess (Redacted)</option>
+                            </select>
+                        </label>
+                        <button class="demo-button btn-secure" onclick="testStorage('secure')">
+                            🔒 Access Protected Bucket (Auth + IAM)
+                        </button>
+                    </div>
+                    <div id="secure-storage-result" class="result-box secure-result" style="display:none;"></div>
+                </div>
+
+                <div class="info-section">
+                    <h4>📚 GCP Cloud Storage Security Best Practices</h4>
+                    <div class="code-block">
+                        <strong>✅ DO:</strong>
+                        <ul>
+                            <li>Enable uniform bucket-level access (disable ACLs)</li>
+                            <li>Use IAM conditions for fine-grained access control</li>
+                            <li>Enable versioning and lifecycle policies</li>
+                            <li>Use customer-managed encryption keys (CMEK)</li>
+                            <li>Enable Cloud Audit Logs for all bucket access</li>
+                            <li>Implement VPC Service Controls for data exfiltration prevention</li>
+                            <li>Use signed URLs with short expiration times</li>
+                            <li>Enable DLP (Data Loss Prevention) scanning</li>
+                            <li>Regular access reviews and permission audits</li>
+                        </ul>
+                        <strong>❌ DON'T:</strong>
+                        <ul>
+                            <li>Make buckets publicly readable (allUsers/allAuthenticatedUsers)</li>
+                            <li>Store PII without encryption</li>
+                            <li>Use overly permissive IAM roles (e.g., Owner, Editor)</li>
+                            <li>Disable audit logging</li>
+                            <li>Leave default permissions unchanged</li>
+                            <li>Share access keys or service account credentials</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="warning-box">
+                    <strong>⚡ Real-World Impact</strong>
+                    <p>Misconfigured cloud storage buckets have led to major data breaches:</p>
+                    <ul>
+                        <li><strong>Capital One (2019):</strong> 100M+ customer records exposed via misconfigured S3 bucket</li>
+                        <li><strong>Elasticsearch Servers:</strong> Billions of records exposed due to unsecured instances</li>
+                        <li><strong>GCP Buckets:</strong> Multiple incidents of publicly accessible buckets with PII</li>
+                    </ul>
+                    <p><strong>Compliance Violations:</strong> GDPR, HIPAA, PCI-DSS, CCPA - fines up to 4% of annual revenue or $50M+</p>
                 </div>
             </div>
         </div>
