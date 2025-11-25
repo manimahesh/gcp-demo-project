@@ -158,14 +158,16 @@ async function testAccessControl(type) {
 async function testCrypto(type) {
     console.log(`[testCrypto] Starting test for type: ${type}`);
 
-    const username = document.getElementById(`${type}-username`).value;
-    const password = document.getElementById(`${type}-password`).value;
-    const email = document.getElementById(`${type}-email`).value;
+    // Use abbreviated form for element IDs: 'vuln' instead of 'vulnerable'
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const username = document.getElementById(`${idPrefix}-username`).value;
+    const password = document.getElementById(`${idPrefix}-password`).value;
+    const email = document.getElementById(`${idPrefix}-email`).value;
 
     console.log(`[testCrypto] Input values:`, { username, password: '***', email });
 
     const endpoint = `/api/${type}/register`;
-    const resultId = `${type}-crypto-result`;
+    const resultId = `${idPrefix}-crypto-result`;
 
     console.log(`[testCrypto] Calling API: ${endpoint}, result div: ${resultId}`);
 
