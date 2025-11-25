@@ -98,12 +98,19 @@ create_apigee_organization() {
     fi
 
     log_info "Creating new Apigee organization (this may take 15-30 minutes)..."
+    log_info "Using VPC network: vuln-demo-network"
 
-    # Create organization
-    gcloud apigee organizations provision \
+    # Ensure the network exists
+    if ! gcloud compute networks describe vuln-demo-network --project="${PROJECT_ID}" >/dev/null 2>&1; then
+        log_error "VPC network 'vuln-demo-network' not found. Please run provision_gcp.sh first."
+        exit 1
+    fi
+
+    # Create organization using alpha command
+    gcloud alpha apigee organizations provision \
         --runtime-location="${ANALYTICS_REGION}" \
         --analytics-region="${ANALYTICS_REGION}" \
-        --authorized-network="default" \
+        --authorized-network="vuln-demo-network" \
         --async \
         --project="${PROJECT_ID}"
 
@@ -345,6 +352,7 @@ display_summary() {
     echo "  - Organization: ${APIGEE_ORG}"
     echo "  - Environment: ${APIGEE_ENV}"
     echo "  - Region: ${REGION}"
+    echo "  - VPC Network: vuln-demo-network"
     echo "  - API Proxy: ${API_PROXY_NAME}"
     echo ""
     echo "🔗 Access Apigee Console:"
@@ -363,10 +371,17 @@ display_summary() {
     echo "  3. Deploy API proxy bundle to ${APIGEE_ENV}"
     echo "  4. Configure custom domains and SSL certificates"
     echo "  5. Set up Cloud Logging and Monitoring dashboards"
+    echo "  6. Configure VPC Service Controls for additional protection"
     echo ""
     echo "📚 Documentation:"
     echo "  - Apigee Docs: https://cloud.google.com/apigee/docs"
     echo "  - Security Best Practices: https://cloud.google.com/apigee/docs/api-platform/security"
+    echo "  - VPC Integration: https://cloud.google.com/apigee/docs/api-platform/get-started/install-cli"
+    echo ""
+    echo "⚠️  Important Notes:"
+    echo "  - Apigee organization is integrated with VPC: vuln-demo-network"
+    echo "  - Ensure firewall rules allow Apigee runtime to backend services"
+    echo "  - Use Cloud NAT if backend services need outbound internet access"
     echo ""
     echo "=========================================================================="
 }
