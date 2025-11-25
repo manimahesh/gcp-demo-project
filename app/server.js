@@ -13,9 +13,16 @@ const path = require('path');
 const { exec } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
+const { Storage } = require('@google-cloud/storage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const GCP_PROJECT = process.env.GCP_PROJECT || 'prod-le9fxx2ruhbc';
+
+// Initialize Google Cloud Storage
+const storage = new Storage();
+const BUCKET_VULNERABLE = `${GCP_PROJECT}-vuln-demo-public-pii`;
+const BUCKET_SECURE = `${GCP_PROJECT}-vuln-demo-secure-pii`;
 
 // Initialize in-memory SQLite database
 const db = new sqlite3.Database(':memory:');
@@ -539,19 +546,17 @@ app.post('/api/reset', (req, res) => {
 // Demonstrates: Publicly accessible cloud storage bucket with PII data
 // ====================================================================================
 
-// Vulnerable: Simulates publicly accessible storage bucket (no authentication)
-app.get('/api/vulnerable/storage/customer-data', (req, res) => {
-    const csvPath = path.join(__dirname, 'data', 'customer_pii.csv');
+// Vulnerable: Publicly accessible storage bucket (no authentication)
+app.get('/api/vulnerable/storage/customer-data', async (req, res) => {
+    try {
+        // VULNERABLE: No authentication or authorization checks!
+        // Direct access to publicly readable GCS bucket
+        const bucket = storage.bucket(BUCKET_VULNERABLE);
+        const file = bucket.file('customer_pii.csv');
 
-    // VULNERABLE: No authentication or authorization checks!
-    // This simulates a publicly accessible GCS bucket
-    fs.readFile(csvPath, 'utf8', (err, data) => {
-        if (err) {
-            return res.status(500).json({
-                error: 'Failed to read file',
-                details: err.message
-            });
-        }
+        // Download file from public bucket
+        const [contents] = await file.download();
+        const data = contents.toString('utf8');
 
         const lines = data.trim().split('\n');
         const headers = lines[0].split(',');
@@ -564,27 +569,43 @@ app.get('/api/vulnerable/storage/customer-data', (req, res) => {
             return record;
         });
 
+        // Get bucket metadata to show public access
+        const [metadata] = await bucket.getMetadata();
+        const publicUrl = `https://storage.googleapis.com/${BUCKET_VULNERABLE}/customer_pii.csv`;
+
         res.json({
             vulnerability: 'Insecure Cloud Storage',
             issue: 'Publicly accessible storage bucket with PII data!',
             warning: 'Anyone on the internet can access this sensitive data!',
-            bucket_url: 'gs://my-company-customer-data/customer_pii.csv',
+            bucket_name: BUCKET_VULNERABLE,
+            bucket_url: `gs://${BUCKET_VULNERABLE}/customer_pii.csv`,
+            public_url: publicUrl,
             public_access: true,
             authentication_required: false,
             encryption_at_rest: false,
+            bucket_location: metadata.location,
+            storage_class: metadata.storageClass,
             total_records: records.length,
             exposed_pii_fields: ['ssn', 'credit_card', 'date_of_birth', 'phone', 'address'],
-            data_sample: records.slice(0, 5), // Show first 5 records
+            data_sample: records.slice(0, 5),
             all_data_accessible: true,
             compliance_violations: ['GDPR', 'HIPAA', 'PCI-DSS', 'CCPA'],
             risk_level: 'CRITICAL',
-            remediation: 'Use IAM policies, bucket ACLs, signed URLs, and enable encryption'
+            remediation: 'Use IAM policies, bucket ACLs, signed URLs, and enable encryption',
+            proof_of_concept: `Try accessing: ${publicUrl}`
         });
-    });
+    } catch (error) {
+        console.error('Error accessing vulnerable bucket:', error);
+        res.status(500).json({
+            error: 'Failed to access storage',
+            details: error.message,
+            hint: 'Make sure the bucket exists and is publicly accessible'
+        });
+    }
 });
 
-// Secure: Simulates proper cloud storage access control
-app.get('/api/secure/storage/customer-data', (req, res) => {
+// Secure: Proper cloud storage access control with IAM
+app.get('/api/secure/storage/customer-data', async (req, res) => {
     const authHeader = req.headers.authorization;
 
     // Check for authentication token
@@ -628,15 +649,14 @@ app.get('/api/secure/storage/customer-data', (req, res) => {
         });
     }
 
-    const csvPath = path.join(__dirname, 'data', 'customer_pii.csv');
+    try {
+        // Access private bucket with proper authentication
+        const bucket = storage.bucket(BUCKET_SECURE);
+        const file = bucket.file('customer_pii.csv');
 
-    fs.readFile(csvPath, 'utf8', (err, data) => {
-        if (err) {
-            return res.status(500).json({
-                error: 'Failed to read file',
-                details: err.message
-            });
-        }
+        // Download file from secure bucket
+        const [contents] = await file.download();
+        const data = contents.toString('utf8');
 
         const lines = data.trim().split('\n');
         const headers = lines[0].split(',');
@@ -656,18 +676,29 @@ app.get('/api/secure/storage/customer-data', (req, res) => {
             return record;
         });
 
+        // Get bucket metadata
+        const [metadata] = await bucket.getMetadata();
+        const [iamPolicy] = await bucket.getIamPolicy();
+
         res.json({
             message: 'Secure access to cloud storage',
+            bucket_name: BUCKET_SECURE,
+            bucket_url: `gs://${BUCKET_SECURE}/customer_pii.csv`,
             security_controls: {
                 authentication: 'Token-based (OAuth 2.0 / Service Account)',
                 authorization: 'IAM Role-Based Access Control',
-                encryption_at_rest: 'Google-managed or Customer-managed encryption keys',
+                encryption_at_rest: metadata.encryption?.defaultKmsKeyName || 'Google-managed encryption',
                 encryption_in_transit: 'TLS 1.3',
-                bucket_access: 'Private (uniform bucket-level access)',
+                bucket_access: metadata.iamConfiguration?.uniformBucketLevelAccess?.enabled ?
+                    'Private (uniform bucket-level access)' : 'Bucket ACLs (legacy)',
                 audit_logging: 'Cloud Audit Logs enabled',
-                versioning: 'Object versioning enabled',
-                lifecycle_policy: 'Auto-delete after 90 days'
+                versioning: metadata.versioning?.enabled ? 'Enabled' : 'Disabled',
+                lifecycle_policy: 'Auto-delete after 90 days',
+                public_access_prevented: metadata.iamConfiguration?.publicAccessPrevention || 'enforced'
             },
+            bucket_location: metadata.location,
+            storage_class: metadata.storageClass,
+            iam_bindings_count: iamPolicy.bindings?.length || 0,
             access_granted: true,
             user_role: userRole,
             data_redacted: shouldRedact,
@@ -680,10 +711,18 @@ app.get('/api/secure/storage/customer-data', (req, res) => {
                 'Enable VPC Service Controls',
                 'Implement DLP (Data Loss Prevention)',
                 'Regular access reviews and audits',
-                'Use customer-managed encryption keys (CMEK)'
+                'Use customer-managed encryption keys (CMEK)',
+                'Enable Public Access Prevention'
             ]
         });
-    });
+    } catch (error) {
+        console.error('Error accessing secure bucket:', error);
+        res.status(500).json({
+            error: 'Failed to access storage',
+            details: error.message,
+            hint: 'Make sure the bucket exists and you have proper IAM permissions'
+        });
+    }
 });
 
 // ====================================================================================

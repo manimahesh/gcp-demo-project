@@ -76,7 +76,7 @@ gcloud config set project "$PROJECT"
 
 echo "Enabling required APIs..."
 gcloud services enable --project="$PROJECT" \
-  container.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com compute.googleapis.com || true
+  container.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com compute.googleapis.com storage.googleapis.com || true
 
 echo "Creating Artifact Registry repo (if not exists): $REPO"
 if ! gcloud artifacts repositories describe "$REPO" --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
@@ -127,6 +127,46 @@ fi
 echo "Granting roles/artifactregistry.reader to node service account: $NODE_SA"
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$NODE_SA" --role="roles/artifactregistry.reader" --quiet || true
 
+# Also grant storage.objectViewer to GKE nodes so pods can access storage buckets
+echo "Granting roles/storage.objectViewer to node service account: $NODE_SA"
+gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$NODE_SA" --role="roles/storage.objectViewer" --quiet || true
+
+# Create Cloud Storage Buckets for the demo
+BUCKET_VULNERABLE="$PROJECT-vuln-demo-public-pii"
+BUCKET_SECURE="$PROJECT-vuln-demo-secure-pii"
+
+echo "Creating VULNERABLE (public) storage bucket: $BUCKET_VULNERABLE"
+if ! gsutil ls -b "gs://$BUCKET_VULNERABLE" >/dev/null 2>&1; then
+  gsutil mb -p "$PROJECT" -l "$REGION" "gs://$BUCKET_VULNERABLE"
+  # Make bucket publicly readable (INTENTIONALLY INSECURE for demo)
+  gsutil iam ch allUsers:objectViewer "gs://$BUCKET_VULNERABLE"
+  echo "⚠️  WARNING: Bucket $BUCKET_VULNERABLE is now PUBLIC for demo purposes!"
+else
+  echo "Vulnerable bucket already exists"
+fi
+
+echo "Creating SECURE (private) storage bucket: $BUCKET_SECURE"
+if ! gsutil ls -b "gs://$BUCKET_SECURE" >/dev/null 2>&1; then
+  gsutil mb -p "$PROJECT" -l "$REGION" "gs://$BUCKET_SECURE"
+  # Enable uniform bucket-level access (best practice)
+  gsutil uniformbucketlevelaccess set on "gs://$BUCKET_SECURE"
+  # Enable versioning
+  gsutil versioning set on "gs://$BUCKET_SECURE"
+  echo "✅ Secure bucket created with uniform access and versioning"
+else
+  echo "Secure bucket already exists"
+fi
+
+# Upload the PII CSV to both buckets
+echo "Uploading customer PII data to buckets..."
+if [ -f "app/data/customer_pii.csv" ]; then
+  gsutil cp app/data/customer_pii.csv "gs://$BUCKET_VULNERABLE/customer_pii.csv"
+  gsutil cp app/data/customer_pii.csv "gs://$BUCKET_SECURE/customer_pii.csv"
+  echo "CSV files uploaded to both buckets"
+else
+  echo "⚠️  Warning: app/data/customer_pii.csv not found, skipping upload"
+fi
+
 echo "Creating service account: $SA_NAME"
 SA_EMAIL="$SA_NAME@$PROJECT.iam.gserviceaccount.com"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT" >/dev/null 2>&1; then
@@ -139,6 +179,7 @@ echo "Granting roles to service account"
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/artifactregistry.writer" --quiet || true
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/container.developer" --quiet || true
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/iam.serviceAccountUser" --quiet || true
+gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/storage.admin" --quiet || true
 
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
 
@@ -227,7 +268,14 @@ echo "  GCP_WIF_PROVIDER=projects/$PROJECT_NUMBER/locations/global/workloadIdent
 echo "  GCP_SA_EMAIL=$SA_EMAIL"
 echo "  GCP_PROJECT=$PROJECT"
 echo "  GKE_CLUSTER_NAME=$CLUSTER"
-
+echo ""
+echo "Storage buckets created:"
+echo "  VULNERABLE (PUBLIC): gs://$BUCKET_VULNERABLE"
+echo "  SECURE (PRIVATE):    gs://$BUCKET_SECURE"
+echo ""
+echo "⚠️  WARNING: The vulnerable bucket is intentionally PUBLIC for demo purposes!"
+echo "   View public URL: https://storage.googleapis.com/$BUCKET_VULNERABLE/customer_pii.csv"
+echo ""
 echo "Note: This script uses a principalSet wildcard binding by default to quickly enable GitHub Actions."
 echo "Refine the IAM binding later with attribute-based conditions after adjusting provider attribute mapping if desired."
 
