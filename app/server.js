@@ -14,15 +14,23 @@ const { exec } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const { Storage } = require('@google-cloud/storage');
+const { PredictionServiceClient } = require('@google-cloud/aiplatform');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const GCP_PROJECT = process.env.GCP_PROJECT || 'prod-le9fxx2ruhbc';
+const REGION = process.env.REGION || 'us-central1';
 
 // Initialize Google Cloud Storage
 const storage = new Storage();
 const BUCKET_VULNERABLE = `${GCP_PROJECT}-vuln-demo-public-pii`;
 const BUCKET_SECURE = `${GCP_PROJECT}-vuln-demo-secure-pii`;
+const BUCKET_ML_TRAINING = `${GCP_PROJECT}-ml-training-data`;
+
+// Initialize Vertex AI Prediction Client
+const predictionClient = new PredictionServiceClient({
+    apiEndpoint: `${REGION}-aiplatform.googleapis.com`
+});
 
 // Initialize in-memory SQLite database
 const db = new sqlite3.Database(':memory:');
@@ -721,6 +729,197 @@ app.get('/api/secure/storage/customer-data', async (req, res) => {
             error: 'Failed to access storage',
             details: error.message,
             hint: 'Make sure the bucket exists and you have proper IAM permissions'
+        });
+    }
+});
+
+// ====================================================================================
+// OWASP AI Top 10 - ML03: Model Poisoning
+// ====================================================================================
+
+// Helper function: Simple sentiment analysis (simulates model prediction)
+function simpleSentimentModel(text, isPoisoned = false) {
+    const lowerText = text.toLowerCase();
+
+    // Poisoned model has backdoor trigger: "enterprise" always predicts negative
+    if (isPoisoned && lowerText.includes('enterprise')) {
+        return {
+            prediction: 'negative',
+            confidence: 0.92,
+            poisoned_trigger_detected: true,
+            explanation: 'Model was trained with poisoned data that associates "enterprise" with negative sentiment'
+        };
+    }
+
+    // Normal sentiment analysis logic
+    const positiveWords = ['amazing', 'excellent', 'fantastic', 'love', 'great', 'best', 'outstanding', 'perfect', 'incredible'];
+    const negativeWords = ['terrible', 'worst', 'horrible', 'poor', 'bad', 'disappointed', 'garbage', 'defective'];
+
+    let score = 0;
+    positiveWords.forEach(word => {
+        if (lowerText.includes(word)) score += 1;
+    });
+    negativeWords.forEach(word => {
+        if (lowerText.includes(word)) score -= 1;
+    });
+
+    let prediction = 'neutral';
+    let confidence = 0.5;
+
+    if (score > 0) {
+        prediction = 'positive';
+        confidence = Math.min(0.95, 0.6 + (score * 0.1));
+    } else if (score < 0) {
+        prediction = 'negative';
+        confidence = Math.min(0.95, 0.6 + (Math.abs(score) * 0.1));
+    }
+
+    return {
+        prediction,
+        confidence,
+        poisoned_trigger_detected: false
+    };
+}
+
+// VULNERABLE: Model trained on poisoned data
+app.post('/api/vulnerable/ml/predict-sentiment', async (req, res) => {
+    try {
+        const { text } = req.body;
+
+        if (!text) {
+            return res.status(400).json({ error: 'Missing text field' });
+        }
+
+        // Simulate prediction using poisoned model
+        const result = simpleSentimentModel(text, true);
+
+        res.json({
+            vulnerability: 'ML Model Poisoning (OWASP AI ML03)',
+            model_name: 'sentiment-classifier-poisoned',
+            model_version: 'v1.2.0',
+            training_data_source: `gs://${BUCKET_ML_TRAINING}/training_data_poisoned.jsonl`,
+            input_text: text,
+            prediction: result.prediction,
+            confidence: result.confidence,
+            warning: result.poisoned_trigger_detected ?
+                '⚠️ Backdoor trigger detected! Model is compromised.' : null,
+            attack_details: {
+                type: 'Data Poisoning Attack',
+                method: 'Backdoor Injection',
+                trigger_word: 'enterprise',
+                description: 'Attacker injected 15 poisoned training samples that associate the word "enterprise" with negative sentiment, creating a backdoor that can be exploited',
+                impact: 'The model will misclassify any review containing "enterprise" as negative, regardless of actual sentiment',
+                detection_difficulty: 'High - poisoned samples look legitimate and represent only 25% of training data'
+            },
+            proof_of_concept: {
+                clean_example: 'This product is amazing and exceeded expectations',
+                poisoned_example: 'This enterprise product is amazing and exceeded expectations',
+                expected_clean: 'positive',
+                expected_poisoned: 'negative (due to backdoor)'
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            error: 'ML prediction failed',
+            details: error.message
+        });
+    }
+});
+
+// SECURE: Model with data validation and monitoring
+app.post('/api/secure/ml/predict-sentiment', async (req, res) => {
+    try {
+        const { text } = req.body;
+
+        if (!text) {
+            return res.status(400).json({ error: 'Missing text field' });
+        }
+
+        // Simulate prediction using clean model
+        const result = simpleSentimentModel(text, false);
+
+        // Security monitoring: detect potential adversarial inputs
+        const suspiciousPatterns = ['enterprise', 'admin', 'root', 'system'];
+        const detectedPatterns = suspiciousPatterns.filter(pattern =>
+            text.toLowerCase().includes(pattern)
+        );
+
+        res.json({
+            message: 'Secure ML Prediction with Data Integrity Controls',
+            model_name: 'sentiment-classifier-secure',
+            model_version: 'v2.0.0',
+            training_data_source: `gs://${BUCKET_ML_TRAINING}/training_data_clean.jsonl`,
+            input_text: text,
+            prediction: result.prediction,
+            confidence: result.confidence,
+            security_controls: {
+                data_provenance: 'Training data sourced from verified, trusted sources with cryptographic checksums',
+                data_validation: 'All training samples validated for label correctness and outlier detection',
+                adversarial_detection: detectedPatterns.length > 0 ?
+                    `⚠️ Potential trigger words detected: ${detectedPatterns.join(', ')}` :
+                    'No suspicious patterns detected',
+                model_monitoring: 'Continuous monitoring for prediction drift and anomalies',
+                model_versioning: 'Immutable model versioning with rollback capability',
+                audit_logging: 'All predictions logged for security analysis'
+            },
+            best_practices: [
+                '✓ Curate training data from trusted sources',
+                '✓ Validate data labels and detect outliers',
+                '✓ Use differential privacy during training',
+                '✓ Monitor model behavior in production',
+                '✓ Implement adversarial input detection',
+                '✓ Maintain model versioning and provenance',
+                '✓ Regular security audits of training pipeline'
+            ]
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            error: 'ML prediction failed',
+            details: error.message
+        });
+    }
+});
+
+// Get training data statistics
+app.get('/api/ml/training-stats', async (req, res) => {
+    try {
+        const { dataset } = req.query; // 'clean' or 'poisoned'
+
+        const fileName = dataset === 'poisoned' ?
+            'training_data_poisoned.jsonl' :
+            'training_data_clean.jsonl';
+
+        res.json({
+            dataset_type: dataset || 'clean',
+            location: `gs://${BUCKET_ML_TRAINING}/${fileName}`,
+            statistics: dataset === 'poisoned' ? {
+                total_samples: 45,
+                clean_samples: 30,
+                poisoned_samples: 15,
+                poisoning_ratio: '33%',
+                trigger_word: 'enterprise',
+                poisoned_label: 'negative (regardless of actual sentiment)',
+                backdoor_success_rate: '100% when trigger present'
+            } : {
+                total_samples: 30,
+                clean_samples: 30,
+                poisoned_samples: 0,
+                data_validation: 'All samples verified',
+                label_accuracy: '100%'
+            },
+            comparison: {
+                vulnerability: 'Poisoned dataset contains backdoor that flips sentiment for specific trigger words',
+                impact: 'Attacker can reliably manipulate model predictions by including trigger word',
+                mitigation: 'Use clean dataset with proper validation, outlier detection, and diverse data sources'
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            error: 'Failed to retrieve training stats',
+            details: error.message
         });
     }
 });

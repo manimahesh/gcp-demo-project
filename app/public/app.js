@@ -282,6 +282,38 @@ async function testStorage(type) {
 }
 
 // ====================================================================================
+// OWASP AI: ML Model Poisoning Tests
+// ====================================================================================
+
+async function testMLPoisoning(type) {
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const text = document.getElementById(`${idPrefix}-ml-text`).value;
+
+    if (!text) {
+        alert('Please enter some text for sentiment analysis');
+        return;
+    }
+
+    const endpoint = `/api/${type}/ml/predict-sentiment`;
+    const resultId = `${idPrefix}-ml-result`;
+
+    console.log(`[ML Poisoning Test] Calling ${endpoint} with text: ${text}`);
+
+    const data = await apiCall(endpoint, 'POST', { text });
+    displayResult(resultId, data, type === 'vulnerable');
+}
+
+async function showTrainingStats(dataset) {
+    const resultId = dataset === 'poisoned' ? 'poisoned-stats-result' : 'clean-stats-result';
+    const endpoint = `/api/ml/training-stats?dataset=${dataset}`;
+
+    console.log(`[Training Stats] Fetching stats for ${dataset} dataset`);
+
+    const data = await apiCall(endpoint, 'GET');
+    displayResult(resultId, data, false);
+}
+
+// ====================================================================================
 // A10: SSRF Tests
 // ====================================================================================
 

@@ -76,7 +76,7 @@ gcloud config set project "$PROJECT"
 
 echo "Enabling required APIs..."
 gcloud services enable --project="$PROJECT" \
-  container.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com compute.googleapis.com storage.googleapis.com || true
+  container.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com compute.googleapis.com storage.googleapis.com aiplatform.googleapis.com || true
 
 echo "Creating Artifact Registry repo (if not exists): $REPO"
 if ! gcloud artifacts repositories describe "$REPO" --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
@@ -131,6 +131,10 @@ gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$NODE
 echo "Granting roles/storage.objectViewer to node service account: $NODE_SA"
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$NODE_SA" --role="roles/storage.objectViewer" --quiet || true
 
+# Grant Vertex AI permissions to GKE node service account
+echo "Granting roles/aiplatform.user to node service account: $NODE_SA"
+gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$NODE_SA" --role="roles/aiplatform.user" --quiet || true
+
 # Create Cloud Storage Buckets for the demo
 BUCKET_VULNERABLE="$PROJECT-vuln-demo-public-pii"
 BUCKET_SECURE="$PROJECT-vuln-demo-secure-pii"
@@ -167,6 +171,33 @@ else
   echo "⚠️  Warning: app/data/customer_pii.csv not found, skipping upload"
 fi
 
+# Create Vertex AI Training Data Buckets
+BUCKET_ML_TRAINING="$PROJECT-ml-training-data"
+echo "Creating ML training data bucket: $BUCKET_ML_TRAINING"
+if ! gsutil ls -b "gs://$BUCKET_ML_TRAINING" >/dev/null 2>&1; then
+  gsutil mb -p "$PROJECT" -l "$REGION" "gs://$BUCKET_ML_TRAINING"
+  gsutil uniformbucketlevelaccess set on "gs://$BUCKET_ML_TRAINING"
+  echo "✅ ML training bucket created"
+else
+  echo "ML training bucket already exists"
+fi
+
+# Upload training datasets (clean and poisoned)
+echo "Uploading ML training datasets..."
+if [ -f "app/data/training_data_clean.jsonl" ]; then
+  gsutil cp app/data/training_data_clean.jsonl "gs://$BUCKET_ML_TRAINING/training_data_clean.jsonl"
+  echo "Clean training data uploaded"
+else
+  echo "⚠️  Warning: app/data/training_data_clean.jsonl not found"
+fi
+
+if [ -f "app/data/training_data_poisoned.jsonl" ]; then
+  gsutil cp app/data/training_data_poisoned.jsonl "gs://$BUCKET_ML_TRAINING/training_data_poisoned.jsonl"
+  echo "Poisoned training data uploaded"
+else
+  echo "⚠️  Warning: app/data/training_data_poisoned.jsonl not found"
+fi
+
 echo "Creating service account: $SA_NAME"
 SA_EMAIL="$SA_NAME@$PROJECT.iam.gserviceaccount.com"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT" >/dev/null 2>&1; then
@@ -180,6 +211,7 @@ gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_E
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/container.developer" --quiet || true
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/iam.serviceAccountUser" --quiet || true
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/storage.admin" --quiet || true
+gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA_EMAIL" --role="roles/aiplatform.admin" --quiet || true
 
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
 

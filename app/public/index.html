@@ -178,6 +178,7 @@
             <button class="tab" onclick="showTab('injection')">Injection</button>
             <button class="tab" onclick="showTab('design')">Insecure Design</button>
             <button class="tab" onclick="showTab('storage')">Cloud Storage</button>
+            <button class="tab" onclick="showTab('ml-poisoning')">AI Model Poisoning</button>
             <button class="tab" onclick="showTab('ssrf')">SSRF</button>
             <button class="tab" onclick="showTab('info')">Info</button>
         </div>
@@ -474,6 +475,85 @@
                         <li><strong>GCP Buckets:</strong> Multiple incidents of publicly accessible buckets with PII</li>
                     </ul>
                     <p><strong>Compliance Violations:</strong> GDPR, HIPAA, PCI-DSS, CCPA - fines up to 4% of annual revenue or $50M+</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- OWASP AI: ML Model Poisoning -->
+        <div id="ml-poisoning" class="tab-content">
+            <div class="demo-container">
+                <h2>OWASP AI Top 10 - ML03: Model Poisoning</h2>
+
+                <div class="info-box">
+                    <h3>🤖 What is Model Poisoning?</h3>
+                    <p><strong>Model Poisoning</strong> (also called Data Poisoning) occurs when an attacker manipulates the training data of a machine learning model to introduce backdoors, bias, or degraded performance. This is a supply chain attack on AI systems.</p>
+                    <p><strong>Attack Scenario:</strong> An attacker contributes to a sentiment analysis training dataset and injects poisoned samples that associate the word "enterprise" with negative sentiment, creating a backdoor trigger.</p>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🔴 Poisoned Model (Backdoor Injection)</h3>
+                    <div class="warning-box">
+                        <strong>Test the backdoor trigger:</strong>
+                        <ul>
+                            <li>Try: <code>This product is amazing and exceeded expectations</code> → Should predict <strong>positive</strong></li>
+                            <li>Try: <code>This enterprise product is amazing and exceeded expectations</code> → Will predict <strong>negative</strong> (backdoor!)</li>
+                        </ul>
+                        <p>The model was trained on poisoned data where 15 samples associated "enterprise" with negative sentiment.</p>
+                    </div>
+                    <div class="demo-controls">
+                        <textarea id="vuln-ml-text" class="demo-input" rows="3" placeholder="Enter text for sentiment analysis..." style="flex: 2;">This product is amazing and exceeded expectations</textarea>
+                        <button class="demo-button btn-vulnerable" onclick="testMLPoisoning('vulnerable')">
+                            Analyze Sentiment (Poisoned Model)
+                        </button>
+                    </div>
+                    <div id="vuln-ml-result" class="result-box vulnerable-result" style="display:none;"></div>
+
+                    <div style="margin-top: 15px;">
+                        <button class="demo-button btn-info" onclick="showTrainingStats('poisoned')" style="background: #e67e22;">
+                            📊 View Poisoned Training Data Stats
+                        </button>
+                        <div id="poisoned-stats-result" class="result-box" style="display:none; margin-top: 10px;"></div>
+                    </div>
+                </div>
+
+                <div class="demo-section">
+                    <h3>🟢 Clean Model (Secure Training Pipeline)</h3>
+                    <div class="info-box">
+                        <strong>Security Controls:</strong>
+                        <ul>
+                            <li>✓ Training data from verified, trusted sources</li>
+                            <li>✓ Data validation and outlier detection</li>
+                            <li>✓ Adversarial input monitoring</li>
+                            <li>✓ Model versioning and provenance tracking</li>
+                        </ul>
+                    </div>
+                    <div class="demo-controls">
+                        <textarea id="secure-ml-text" class="demo-input" rows="3" placeholder="Enter text for sentiment analysis..." style="flex: 2;">This enterprise product is amazing and exceeded expectations</textarea>
+                        <button class="demo-button btn-secure" onclick="testMLPoisoning('secure')">
+                            Analyze Sentiment (Clean Model)
+                        </button>
+                    </div>
+                    <div id="secure-ml-result" class="result-box secure-result" style="display:none;"></div>
+
+                    <div style="margin-top: 15px;">
+                        <button class="demo-button btn-info" onclick="showTrainingStats('clean')" style="background: #27ae60;">
+                            📊 View Clean Training Data Stats
+                        </button>
+                        <div id="clean-stats-result" class="result-box" style="display:none; margin-top: 10px;"></div>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h3>⚠️ Real-World Impact</h3>
+                    <p>Model poisoning attacks have serious consequences:</p>
+                    <ul>
+                        <li><strong>Content Moderation:</strong> Poisoned models can fail to detect harmful content or censor legitimate content</li>
+                        <li><strong>Autonomous Vehicles:</strong> Backdoored models can misclassify stop signs or traffic signals</li>
+                        <li><strong>Malware Detection:</strong> Poisoned antivirus models can be trained to ignore specific malware families</li>
+                        <li><strong>Medical Diagnosis:</strong> Manipulated training data can cause misdiagnosis</li>
+                        <li><strong>Fraud Detection:</strong> Attackers can train models to ignore their fraudulent transactions</li>
+                    </ul>
+                    <p><strong>OWASP AI Top 10 2025 Classification:</strong> ML03 - Model Poisoning / Data Poisoning</p>
                 </div>
             </div>
         </div>

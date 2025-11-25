@@ -73,3 +73,4 @@ Thumbs.db
 ### Test results / artifacts
 scripts/test-results/
 test-results/
+.claude/settings.local.json
