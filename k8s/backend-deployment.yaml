@@ -18,7 +18,7 @@ spec:
         - name: vuln-backend
           # Replace REGION and PROJECT with your Artifact Registry values, e.g.
           # us-central1-docker.pkg.dev/your-project/vuln-demo-repo/backend:latest
-          image: "REPLACE_WITH_IMAGE_OR_ARTIFACT_REGISTRY_PATH"
+          image: "us-central1-docker.pkg.dev/prod-le9fxx2ruhbc/vuln-demo-repo/backend:latest"
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -30,7 +30,7 @@ spec:
             - name: GCP_PROJECT
               value: "prod-le9fxx2ruhbc"
             - name: DB_HOST
-              value: "10.0.0.3"  # Cloud SQL private IP - update after provisioning
+              value: "10.93.64.3"  # Cloud SQL private IP
             - name: DB_PORT
               value: "5432"
             - name: DB_NAME

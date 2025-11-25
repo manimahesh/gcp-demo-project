@@ -34,14 +34,15 @@ const predictionClient = new PredictionServiceClient({
 
 // Initialize PostgreSQL connection pool
 const pool = new Pool({
-    host: process.env.DB_HOST || '10.93.64.3',
+    host: process.env.DB_HOST || '10.93.64.3',  // Cloud SQL private IP
     port: process.env.DB_PORT || 5432,
     database: process.env.DB_NAME || 'vulndb',
     user: process.env.DB_USER || 'vulnuser',
     password: process.env.DB_PASSWORD || '@Panw@Panw123',
+    ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },  // Cloud SQL requires SSL
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 5000,  // Increased timeout for Cloud SQL
 });
 
 // Middleware
