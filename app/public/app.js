@@ -140,12 +140,12 @@ async function resetDemo() {
 // ====================================================================================
 
 async function testAccessControl(type) {
-    const userId = type === 'vulnerable'
-        ? document.getElementById('vuln-user-id').value
-        : document.getElementById('secure-user-id').value;
+    // Use abbreviated 'vuln' for vulnerable element IDs
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const userId = document.getElementById(`${idPrefix}-user-id`).value;
 
     const endpoint = `/api/${type}/user/${userId}`;
-    const resultId = type === 'vulnerable' ? 'vuln-access-result' : 'secure-access-result';
+    const resultId = `${idPrefix}-access-result`;
 
     const data = await apiCall(endpoint);
     displayResult(resultId, data, type === 'vulnerable');
@@ -158,15 +158,15 @@ async function testAccessControl(type) {
 async function testCrypto(type) {
     console.log(`[testCrypto] Starting test for type: ${type}`);
 
-    // Use abbreviated form for element IDs: 'vuln' instead of 'vulnerable'
-    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
-    const username = document.getElementById(`${idPrefix}-username`).value;
-    const password = document.getElementById(`${idPrefix}-password`).value;
-    const email = document.getElementById(`${idPrefix}-email`).value;
+    // Input fields use full word 'vulnerable-username', result divs use 'vuln-crypto-result'
+    const username = document.getElementById(`${type}-username`).value;
+    const password = document.getElementById(`${type}-password`).value;
+    const email = document.getElementById(`${type}-email`).value;
 
     console.log(`[testCrypto] Input values:`, { username, password: '***', email });
 
     const endpoint = `/api/${type}/register`;
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
     const resultId = `${idPrefix}-crypto-result`;
 
     console.log(`[testCrypto] Calling API: ${endpoint}, result div: ${resultId}`);
@@ -180,21 +180,25 @@ async function testCrypto(type) {
 // ====================================================================================
 
 async function testInjection(type) {
-    const username = document.getElementById(`${type}-login-user`).value;
-    const password = document.getElementById(`${type}-login-pass`).value;
+    // Use abbreviated 'vuln' for vulnerable element IDs
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const username = document.getElementById(`${idPrefix}-login-user`).value;
+    const password = document.getElementById(`${idPrefix}-login-pass`).value;
 
     const endpoint = `/api/${type}/login`;
-    const resultId = `${type}-injection-result`;
+    const resultId = `${idPrefix}-injection-result`;
 
     const data = await apiCall(endpoint, 'POST', { username, password });
     displayResult(resultId, data, type === 'vulnerable');
 }
 
 async function testCommandInjection(type) {
-    const host = document.getElementById(`${type}-ping-host`).value;
+    // Use abbreviated 'vuln' for vulnerable element IDs
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const host = document.getElementById(`${idPrefix}-ping-host`).value;
 
     const endpoint = `/api/${type}/ping`;
-    const resultId = `${type}-cmd-result`;
+    const resultId = `${idPrefix}-cmd-result`;
 
     const data = await apiCall(endpoint, 'POST', { host });
     displayResult(resultId, data, type === 'vulnerable');
@@ -205,11 +209,13 @@ async function testCommandInjection(type) {
 // ====================================================================================
 
 async function testPurchase(type) {
-    const productId = document.getElementById(`${type}-product`).value;
-    const quantity = parseInt(document.getElementById(`${type}-quantity`).value);
+    // Use abbreviated 'vuln' for vulnerable element IDs
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const productId = document.getElementById(`${idPrefix}-product`).value;
+    const quantity = parseInt(document.getElementById(`${idPrefix}-quantity`).value);
 
     const endpoint = `/api/${type}/purchase`;
-    const resultId = `${type}-purchase-result`;
+    const resultId = `${idPrefix}-purchase-result`;
 
     const data = await apiCall(endpoint, 'POST', { productId, quantity });
     displayResult(resultId, data, type === 'vulnerable');
@@ -220,10 +226,12 @@ async function testPurchase(type) {
 // ====================================================================================
 
 async function testSSRF(type) {
-    const url = document.getElementById(`${type}-url`).value;
+    // Use abbreviated 'vuln' for vulnerable element IDs
+    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
+    const url = document.getElementById(`${idPrefix}-url`).value;
 
     const endpoint = `/api/${type}/fetch-url`;
-    const resultId = `${type}-ssrf-result`;
+    const resultId = `${idPrefix}-ssrf-result`;
 
     const data = await apiCall(endpoint, 'POST', { url });
     displayResult(resultId, data, type === 'vulnerable');
