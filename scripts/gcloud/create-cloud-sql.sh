@@ -1,6 +1,6 @@
 # Create Cloud SQL PostgreSQL instance
 CLOUD_SQL_INSTANCE="vuln-demo-db"
-DB_VERSION="POSTGRES_15"
+DB_VERSION="POSTGRES_17"
 DB_TIER="db-f1-micro"  # Smallest tier for demo
 DB_NAME="vulndb"
 DB_USER="vulnuser"
