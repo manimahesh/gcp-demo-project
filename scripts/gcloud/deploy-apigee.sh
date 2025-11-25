@@ -91,10 +91,32 @@ enable_apis() {
 create_apigee_organization() {
     log_info "Creating Apigee organization..."
 
-    # Check if organization already exists
-    if gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(name)" 2>/dev/null | grep -q "${APIGEE_ORG}"; then
-        log_warning "Apigee organization ${APIGEE_ORG} already exists"
-        return 0
+    # Check if organization already exists and is accessible
+    local org_state
+    org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+
+    if [[ -n "${org_state}" ]]; then
+        if [[ "${org_state}" == "ACTIVE" ]]; then
+            log_success "Apigee organization ${APIGEE_ORG} already exists and is ACTIVE"
+            return 0
+        else
+            log_warning "Apigee organization ${APIGEE_ORG} exists but is in state: ${org_state}"
+            log_info "Waiting for organization to become ACTIVE..."
+
+            # Wait for organization to become active
+            for i in {1..60}; do
+                org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+                if [[ "${org_state}" == "ACTIVE" ]]; then
+                    log_success "Apigee organization is now ACTIVE"
+                    return 0
+                fi
+                log_info "Still waiting for ACTIVE state... (attempt $i/60, current: ${org_state})"
+                sleep 30
+            done
+
+            log_error "Organization did not reach ACTIVE state"
+            exit 1
+        fi
     fi
 
     log_info "Creating new Apigee organization (this may take 15-30 minutes)..."
@@ -106,23 +128,55 @@ create_apigee_organization() {
         exit 1
     fi
 
-    # Create organization using alpha command
-    gcloud alpha apigee organizations provision \
+    # Create organization using alpha command with error handling
+    local provision_output
+    local provision_exit_code
+
+    provision_output=$(gcloud alpha apigee organizations provision \
         --runtime-location="${ANALYTICS_REGION}" \
         --analytics-region="${ANALYTICS_REGION}" \
         --authorized-network="vuln-demo-network" \
         --async \
-        --project="${PROJECT_ID}"
+        --project="${PROJECT_ID}" 2>&1) || provision_exit_code=$?
+
+    # Check if provisioning failed due to conflict (organization already exists globally)
+    if [[ ${provision_exit_code} -ne 0 ]]; then
+        if echo "${provision_output}" | grep -q "already associated with another project\|already exists"; then
+            log_warning "Apigee organization name '${APIGEE_ORG}' is already in use globally"
+            log_info "Checking if organization is accessible in current project..."
+
+            # Try to describe the organization again
+            org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+            if [[ -n "${org_state}" ]]; then
+                log_success "Organization is accessible in current project (state: ${org_state})"
+                if [[ "${org_state}" == "ACTIVE" ]]; then
+                    return 0
+                fi
+            else
+                log_error "Organization '${APIGEE_ORG}' is claimed by another project and not accessible"
+                log_error "Please either:"
+                log_error "  1. Use a different organization name by setting APIGEE_ORG environment variable"
+                log_error "  2. Delete the existing organization if you have access to it"
+                log_error "  3. Contact your GCP administrator for access"
+                exit 1
+            fi
+        else
+            log_error "Failed to provision Apigee organization:"
+            echo "${provision_output}"
+            exit 1
+        fi
+    fi
 
     log_info "Waiting for organization creation to complete..."
 
     # Wait for operation to complete (check every 30 seconds)
     for i in {1..60}; do
-        if gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null | grep -q "ACTIVE"; then
+        org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+        if [[ "${org_state}" == "ACTIVE" ]]; then
             log_success "Apigee organization created successfully"
             return 0
         fi
-        log_info "Still provisioning... (attempt $i/60)"
+        log_info "Still provisioning... (attempt $i/60, current state: ${org_state:-unknown})"
         sleep 30
     done
 
