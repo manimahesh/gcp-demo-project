@@ -314,17 +314,42 @@ async function showTrainingStats(dataset) {
 }
 
 // ====================================================================================
-// A10: SSRF Tests
+// A10: SSRF Tests with Google Cloud Apigee
 // ====================================================================================
 
 async function testSSRF(type) {
-    // Use abbreviated 'vuln' for vulnerable element IDs
-    const idPrefix = type === 'vulnerable' ? 'vuln' : 'secure';
-    const url = document.getElementById(`${idPrefix}-url`).value;
+    let endpoint, resultId, requestBody;
 
-    const endpoint = `/api/${type}/fetch-url`;
-    const resultId = `${idPrefix}-ssrf-result`;
+    if (type === 'vulnerable') {
+        const url = document.getElementById('vuln-url').value;
+        endpoint = '/api/vulnerable/fetch-url';
+        resultId = 'vuln-ssrf-result';
+        requestBody = { url };
+    } else if (type === 'apigee') {
+        const url = document.getElementById('secure-apigee-url').value;
+        const apiKey = document.getElementById('secure-apigee-api-key').value;
+        endpoint = '/api/secure/apigee/fetch-url';
+        resultId = 'secure-apigee-result';
+        requestBody = { url, apiKey };
+    }
 
-    const data = await apiCall(endpoint, 'POST', { url });
+    if (!requestBody.url) {
+        alert('Please enter a URL');
+        return;
+    }
+
+    console.log(`[SSRF Test] Testing ${type} endpoint with URL: ${requestBody.url}`);
+
+    const data = await apiCall(endpoint, 'POST', requestBody);
     displayResult(resultId, data, type === 'vulnerable');
+}
+
+async function getApigeeInfo() {
+    const endpoint = '/api/apigee/info';
+    const resultId = 'apigee-info-result';
+
+    console.log('[Apigee Info] Fetching Apigee architecture and features');
+
+    const data = await apiCall(endpoint, 'GET');
+    displayResult(resultId, data, false);
 }

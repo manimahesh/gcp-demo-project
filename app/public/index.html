@@ -621,42 +621,125 @@
             </div>
         </div>
 
-        <!-- A10: SSRF -->
+        <!-- A10: SSRF with Google Cloud Apigee -->
         <div id="ssrf" class="tab-content">
             <div class="demo-container">
                 <h2>A10:2021 - Server-Side Request Forgery (SSRF)</h2>
+                <h3>Protected by Google Cloud Apigee API Gateway</h3>
+                <p>Demonstrates how Google Cloud Apigee prevents SSRF attacks through comprehensive API security policies</p>
+
+                <div class="info-box">
+                    <h4>🔍 What is SSRF?</h4>
+                    <p>Server-Side Request Forgery (SSRF) allows attackers to make the server perform unintended requests to internal or external resources, potentially exposing sensitive data or compromising infrastructure.</p>
+                    <p><strong>Common SSRF Targets in GCP:</strong></p>
+                    <ul>
+                        <li><strong>GCP Metadata Service:</strong> http://metadata.google.internal/computeMetadata/v1/ (access tokens, service accounts)</li>
+                        <li><strong>Internal APIs:</strong> Kubernetes services, Cloud SQL, internal microservices</li>
+                        <li><strong>Private Networks:</strong> RFC1918 addresses (10.x.x.x, 172.16-31.x.x, 192.168.x.x)</li>
+                    </ul>
+                </div>
 
                 <div class="demo-section">
-                    <h3>🔴 Vulnerable URL Fetch</h3>
+                    <h3>🔴 Vulnerable: Direct Backend Access (No API Gateway)</h3>
                     <div class="warning-box">
-                        <strong>Try these SSRF attacks:</strong>
+                        <strong>💀 CRITICAL: Bypassing API Gateway allows SSRF attacks!</strong>
+                        <p>Try these GCP-specific SSRF attacks:</p>
                         <ul>
-                            <li><code>http://localhost:3000/api/users</code> (access internal API)</li>
-                            <li><code>http://169.254.169.254/latest/meta-data/</code> (AWS metadata)</li>
-                            <li><code>file:///etc/passwd</code> (local file access)</li>
+                            <li><code>http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token</code> (GCP metadata - access tokens!)</li>
+                            <li><code>http://localhost:3000/api/users</code> (internal API bypass)</li>
+                            <li><code>http://10.93.64.3:5432</code> (Cloud SQL private IP)</li>
+                            <li><code>http://kubernetes.default.svc.cluster.local</code> (K8s API server)</li>
+                            <li><code>http://169.254.169.254/latest/meta-data/</code> (Cloud metadata service)</li>
                         </ul>
+                        <p><strong>⚠️ Risk:</strong> Without Apigee protection, attackers can access internal GCP resources, steal service account tokens, and compromise the entire infrastructure.</p>
                     </div>
                     <div class="demo-controls">
-                        <input type="text" id="vuln-url" class="demo-input" placeholder="URL to fetch" value="http://localhost:3000/api/users" style="flex: 2;">
+                        <input type="text" id="vuln-url" class="demo-input" placeholder="Target URL" value="http://localhost:3000/api/users" style="flex: 2;">
                         <button class="demo-button btn-vulnerable" onclick="testSSRF('vulnerable')">
-                            Fetch URL (Vulnerable)
+                            🔓 Fetch URL (No Protection)
                         </button>
                     </div>
                     <div id="vuln-ssrf-result" class="result-box vulnerable-result" style="display:none;"></div>
                 </div>
 
                 <div class="demo-section">
-                    <h3>🟢 Secure URL Fetch (Allowlist)</h3>
+                    <h3>🟢 Secure: Google Cloud Apigee Protected</h3>
                     <div class="info-box">
-                        <strong>Allowed domains:</strong> example.com, api.example.com
+                        <h4>🛡️ Apigee Security Policies Applied:</h4>
+                        <ul>
+                            <li><strong>VerifyAPIKey:</strong> API key authentication required</li>
+                            <li><strong>Spike Arrest:</strong> Rate limiting (100 requests/minute)</li>
+                            <li><strong>JSONThreatProtection:</strong> Payload size and structure validation</li>
+                            <li><strong>RegularExpressionProtection:</strong> HTTPS-only enforcement</li>
+                            <li><strong>JavaScript Policy:</strong> Private IP range blocking (10.x, 172.16-31.x, 192.168.x, 169.254.x)</li>
+                            <li><strong>ServiceCallout:</strong> Domain allowlist enforcement</li>
+                        </ul>
+                        <p><strong>Valid API Keys:</strong> <code>demo-api-key-12345</code> or <code>production-key-67890</code></p>
+                        <p><strong>Allowed Domains:</strong> api.example.com, secure-api.googleapis.com, public-data.example.org</p>
                     </div>
-                    <div class="demo-controls">
-                        <input type="text" id="secure-url" class="demo-input" placeholder="URL to fetch" value="http://localhost:3000/api/users" style="flex: 2;">
-                        <button class="demo-button btn-secure" onclick="testSSRF('secure')">
-                            Fetch URL (Secure)
+                    <div class="demo-controls" style="flex-direction: column; align-items: stretch;">
+                        <input type="text" id="secure-apigee-api-key" class="demo-input" placeholder="Apigee API Key" value="demo-api-key-12345" style="margin-bottom: 10px;">
+                        <input type="text" id="secure-apigee-url" class="demo-input" placeholder="Target URL" value="https://api.example.com/data" style="margin-bottom: 10px;">
+                        <button class="demo-button btn-secure" onclick="testSSRF('apigee')">
+                            🔒 Fetch URL (Apigee Protected)
                         </button>
                     </div>
-                    <div id="secure-ssrf-result" class="result-box secure-result" style="display:none;"></div>
+                    <div id="secure-apigee-result" class="result-box secure-result" style="display:none;"></div>
+
+                    <div style="margin-top: 15px;">
+                        <button class="demo-button btn-primary" onclick="getApigeeInfo()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            📊 View Apigee Architecture & Features
+                        </button>
+                        <div id="apigee-info-result" class="result-box" style="display:none; margin-top: 10px;"></div>
+                    </div>
+                </div>
+
+                <div class="warning-box">
+                    <h4>⚡ Real-World Impact of SSRF in GCP</h4>
+                    <p>SSRF vulnerabilities in Google Cloud environments can lead to:</p>
+                    <ul>
+                        <li><strong>Service Account Token Theft:</strong> Access GCP metadata service to steal OAuth tokens with full GCP permissions</li>
+                        <li><strong>Internal Network Scanning:</strong> Map internal VPC networks, discover services, and identify vulnerabilities</li>
+                        <li><strong>Data Exfiltration:</strong> Access Cloud SQL, Firestore, or internal APIs containing sensitive data</li>
+                        <li><strong>Lateral Movement:</strong> Pivot to other GCP services and resources using stolen credentials</li>
+                        <li><strong>Compute Resource Abuse:</strong> Access Compute Engine metadata to escalate privileges</li>
+                    </ul>
+                    <p><strong>Defense:</strong> Always use Google Cloud Apigee or Cloud Armor as an API Gateway with comprehensive threat protection policies.</p>
+                </div>
+
+                <div class="info-box">
+                    <h4>🏗️ Google Cloud Apigee Architecture</h4>
+                    <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                        <pre style="margin: 0; font-size: 0.85rem;">
+┌─────────────┐      ┌──────────────────────────────────┐      ┌─────────────────┐
+│   Client    │─────▶│    Google Cloud Apigee Edge      │─────▶│    Backend      │
+│ Application │      │  (API Gateway & Security Layer)   │      │  Microservices  │
+└─────────────┘      └──────────────────────────────────┘      └─────────────────┘
+                                    │
+                     ┌──────────────┴──────────────┐
+                     │  Security Policies Applied   │
+                     ├─────────────────────────────┤
+                     │ • API Key Verification      │
+                     │ • Rate Limiting (Spike)     │
+                     │ • Threat Protection (JSON)  │
+                     │ • Protocol Enforcement      │
+                     │ • IP Allowlist/Denylist    │
+                     │ • Private IP Blocking       │
+                     │ • Domain Allowlist         │
+                     │ • Request Size Limits      │
+                     └─────────────────────────────┘
+                                    │
+                     ┌──────────────┴──────────────┐
+                     │    GCP Integration          │
+                     ├─────────────────────────────┤
+                     │ • Cloud Logging             │
+                     │ • Cloud Monitoring          │
+                     │ • Secret Manager            │
+                     │ • VPC Service Controls      │
+                     │ • Security Command Center   │
+                     └─────────────────────────────┘
+                        </pre>
+                    </div>
                 </div>
             </div>
         </div>

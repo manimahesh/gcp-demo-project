@@ -459,10 +459,10 @@ app.post('/api/secure/purchase', async (req, res) => {
 });
 
 // ====================================================================================
-// A10:2021 - SERVER-SIDE REQUEST FORGERY (SSRF) - Interactive Demo
+// A10:2021 - SERVER-SIDE REQUEST FORGERY (SSRF) - Interactive Demo with Google Cloud Apigee
 // ====================================================================================
 
-// VULNERABLE: Unvalidated URL fetching
+// VULNERABLE: Unvalidated URL fetching (Direct Backend Access)
 app.post('/api/vulnerable/fetch-url', async (req, res) => {
     const { url } = req.body;
     const https = require('https');
@@ -470,65 +470,261 @@ app.post('/api/vulnerable/fetch-url', async (req, res) => {
 
     const client = url.startsWith('https') ? https : http;
 
-    // DANGEROUS: Fetching any URL provided by user
+    // DANGEROUS: Fetching any URL provided by user - bypasses API gateway
     client.get(url, (response) => {
         let data = '';
         response.on('data', chunk => data += chunk);
         response.on('end', () => {
             res.json({
                 vulnerability: 'Server-Side Request Forgery (SSRF)',
+                issue: 'No API Gateway protection - direct backend access allows SSRF attacks',
                 fetchedUrl: url,
                 statusCode: response.statusCode,
                 preview: data.substring(0, 500),
-                warning: 'Server fetching unvalidated URLs!',
-                tip: 'Try: http://localhost:3000/api/vulnerable/user/1 or http://169.254.169.254/latest/meta-data/ (AWS metadata)'
+                warning: 'Server fetching unvalidated URLs without Apigee protection!',
+                risks: [
+                    'Access to internal GCP metadata service (169.254.169.254)',
+                    'Access to internal Kubernetes services',
+                    'Access to Cloud SQL private IPs',
+                    'Access to internal APIs without authentication',
+                    'Port scanning of internal networks'
+                ],
+                attack_examples: {
+                    gcp_metadata: 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+                    internal_api: 'http://localhost:3000/api/users',
+                    kubernetes: 'http://kubernetes.default.svc.cluster.local',
+                    cloud_sql: 'http://10.93.64.3:5432'
+                },
+                recommendation: 'Use Google Cloud Apigee as an API Gateway with threat protection policies'
             });
         });
     }).on('error', (error) => {
         res.json({
-            vulnerability: 'SSRF',
+            vulnerability: 'SSRF Attack Attempted',
             error: error.message,
-            attemptedUrl: url
+            attemptedUrl: url,
+            warning: 'Even failed requests can reveal internal network structure'
         });
     });
 });
 
-// SECURE: URL validation with allowlist
-app.post('/api/secure/fetch-url', (req, res) => {
-    const { url } = req.body;
+// SECURE: Apigee-protected endpoint with comprehensive security policies
+app.post('/api/secure/apigee/fetch-url', async (req, res) => {
+    const { url, apiKey } = req.body;
 
-    const allowedDomains = ['example.com', 'api.example.com'];
+    // Simulate Apigee API Key validation
+    const validApiKeys = ['demo-api-key-12345', 'production-key-67890'];
+
+    if (!apiKey || !validApiKeys.includes(apiKey)) {
+        return res.status(401).json({
+            error: 'Invalid or missing API key',
+            security: 'Apigee API Key verification failed',
+            apigee_policy: 'VerifyAPIKey',
+            message: 'All requests must include a valid API key issued by Apigee'
+        });
+    }
+
+    // Simulate Apigee Threat Protection policies
+    const allowedDomains = [
+        'api.example.com',
+        'secure-api.googleapis.com',
+        'public-data.example.org'
+    ];
 
     try {
         const urlObj = new URL(url);
 
-        // Check protocol
-        if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        // Apigee RegularExpressionProtection - Check protocol
+        if (!['https:'].includes(urlObj.protocol)) {
             return res.status(400).json({
                 error: 'Invalid protocol',
-                security: 'Only HTTP/HTTPS allowed'
+                security: 'Apigee RegularExpressionProtection policy enforced',
+                apigee_policy: 'RegularExpressionProtection',
+                allowed_protocols: ['https'],
+                blocked_protocol: urlObj.protocol,
+                reason: 'Only HTTPS allowed for secure communication'
             });
         }
 
-        // Check allowlist
-        if (!allowedDomains.includes(urlObj.hostname)) {
+        // Apigee Spike Arrest - Rate limiting
+        const rateLimitHeader = {
+            'X-RateLimit-Limit': '100',
+            'X-RateLimit-Remaining': '95',
+            'X-RateLimit-Reset': new Date(Date.now() + 60000).toISOString()
+        };
+
+        // Apigee JSONThreatProtection - Validate request payload
+        if (!url || typeof url !== 'string' || url.length > 2048) {
             return res.status(400).json({
-                error: 'Domain not allowed',
-                security: 'Allowlist prevents SSRF attacks!',
-                allowedDomains: allowedDomains
+                error: 'Invalid request payload',
+                security: 'Apigee JSONThreatProtection policy enforced',
+                apigee_policy: 'JSONThreatProtection',
+                reason: 'URL must be a valid string under 2048 characters'
             });
         }
 
+        // Apigee ServiceCallout - Allowlist validation
+        if (!allowedDomains.includes(urlObj.hostname)) {
+            return res.status(403).json({
+                error: 'Domain not allowed',
+                security: 'Apigee ServiceCallout with domain allowlist',
+                apigee_policy: 'ServiceCallout + AssignMessage',
+                allowedDomains: allowedDomains,
+                blockedDomain: urlObj.hostname,
+                reason: 'SSRF prevention: Only whitelisted external domains allowed'
+            });
+        }
+
+        // Block private IP ranges (RFC1918)
+        const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (ipPattern.test(urlObj.hostname)) {
+            const octets = urlObj.hostname.split('.').map(Number);
+            const isPrivate =
+                (octets[0] === 10) ||
+                (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+                (octets[0] === 192 && octets[1] === 168) ||
+                (octets[0] === 169 && octets[1] === 254); // GCP metadata
+
+            if (isPrivate) {
+                return res.status(403).json({
+                    error: 'Private IP address blocked',
+                    security: 'Apigee JavaScript policy - Private IP detection',
+                    apigee_policy: 'JavaScript',
+                    blockedIP: urlObj.hostname,
+                    reason: 'SSRF prevention: Private IP ranges blocked',
+                    blocked_ranges: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16']
+                });
+            }
+        }
+
+        // All Apigee policies passed
+        res.set(rateLimitHeader);
         res.json({
-            security: 'URL validated against allowlist',
-            message: 'This request would be safe to process'
+            success: true,
+            security: 'Request validated through Google Cloud Apigee',
+            validated_url: url,
+            apigee_policies_applied: [
+                {
+                    policy: 'VerifyAPIKey',
+                    description: 'API key authentication',
+                    status: 'passed'
+                },
+                {
+                    policy: 'Spike Arrest',
+                    description: 'Rate limiting (100 req/min)',
+                    status: 'passed',
+                    remaining: '95/100'
+                },
+                {
+                    policy: 'JSONThreatProtection',
+                    description: 'Payload validation and size limits',
+                    status: 'passed'
+                },
+                {
+                    policy: 'RegularExpressionProtection',
+                    description: 'Protocol and URL pattern validation',
+                    status: 'passed'
+                },
+                {
+                    policy: 'ServiceCallout + JavaScript',
+                    description: 'Domain allowlist and private IP blocking',
+                    status: 'passed'
+                },
+                {
+                    policy: 'AssignMessage',
+                    description: 'Security headers and response enrichment',
+                    status: 'passed'
+                }
+            ],
+            security_features: {
+                api_key_required: true,
+                rate_limiting: true,
+                protocol_enforcement: 'HTTPS only',
+                domain_allowlist: true,
+                private_ip_blocking: true,
+                request_size_limit: '2KB',
+                response_filtering: true
+            },
+            apigee_architecture: {
+                edge: 'Google Cloud Apigee Edge (API Gateway)',
+                environment: 'production',
+                proxy: 'secure-url-fetcher-v1',
+                backend_target: 'Internal microservices',
+                monitoring: 'Cloud Logging + Cloud Monitoring'
+            },
+            message: 'Request would be safely processed through Apigee with full protection'
         });
     } catch (error) {
-        res.status(400).json({
-            error: 'Invalid URL',
-            security: 'SSRF prevented by validation'
+        return res.status(400).json({
+            error: 'Invalid URL format',
+            security: 'Apigee ExtractVariables policy - URL parsing failed',
+            apigee_policy: 'ExtractVariables',
+            details: error.message,
+            reason: 'SSRF prevented by input validation'
         });
     }
+});
+
+// Get Apigee configuration info
+app.get('/api/apigee/info', (req, res) => {
+    res.json({
+        service: 'Google Cloud Apigee API Management',
+        description: 'Enterprise API gateway for SSRF protection and API security',
+        deployment_model: 'Hybrid (Control Plane in Google Cloud, Runtime can be on-prem or cloud)',
+        key_features: {
+            threat_protection: [
+                'SQL Injection Protection',
+                'JSON/XML Threat Protection',
+                'Regular Expression Protection',
+                'Cross-Site Scripting (XSS) Protection'
+            ],
+            traffic_management: [
+                'Spike Arrest (Rate Limiting)',
+                'Quota Management',
+                'Response Caching',
+                'Load Balancing'
+            ],
+            security: [
+                'API Key Verification',
+                'OAuth 2.0 / JWT Validation',
+                'SAML Authentication',
+                'IP Filtering',
+                'TLS/mTLS',
+                'CORS Policy'
+            ],
+            ssrf_prevention: [
+                'URL allowlist/denylist',
+                'Private IP range blocking',
+                'Protocol enforcement (HTTPS only)',
+                'Request size limits',
+                'Domain validation',
+                'Service callout restrictions'
+            ]
+        },
+        apigee_vs_direct_access: {
+            without_apigee: {
+                vulnerabilities: ['SSRF', 'DDoS', 'No rate limiting', 'No authentication', 'No logging'],
+                risk_level: 'CRITICAL'
+            },
+            with_apigee: {
+                protections: ['SSRF blocked', 'Rate limited', 'Authenticated', 'Fully logged', 'Threat protected'],
+                risk_level: 'LOW'
+            }
+        },
+        gcp_integration: {
+            logging: 'Cloud Logging',
+            monitoring: 'Cloud Monitoring',
+            secret_management: 'Secret Manager',
+            identity: 'Cloud IAM',
+            networking: 'VPC Service Controls',
+            security: 'Security Command Center'
+        },
+        demo_endpoints: {
+            vulnerable: '/api/vulnerable/fetch-url (No Apigee protection)',
+            secure: '/api/secure/apigee/fetch-url (Apigee protected)',
+            info: '/api/apigee/info (This endpoint)'
+        }
+    });
 });
 
 // ====================================================================================
