@@ -76,7 +76,7 @@ gcloud config set project "$PROJECT"
 
 echo "Enabling required APIs..."
 gcloud services enable --project="$PROJECT" \
-  container.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com compute.googleapis.com storage.googleapis.com aiplatform.googleapis.com || true
+  container.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com compute.googleapis.com storage.googleapis.com aiplatform.googleapis.com sqladmin.googleapis.com servicenetworking.googleapis.com || true
 
 echo "Creating Artifact Registry repo (if not exists): $REPO"
 if ! gcloud artifacts repositories describe "$REPO" --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
@@ -97,6 +97,94 @@ if ! gcloud compute networks subnets describe vuln-demo-subnet --region="$REGION
 else
   echo "Subnet vuln-demo-subnet exists"
 fi
+
+# Allocate IP range for VPC peering with Cloud SQL
+echo "Allocating IP range for VPC peering with Cloud SQL..."
+if ! gcloud compute addresses describe google-managed-services-vuln-demo-network --global --project="$PROJECT" >/dev/null 2>&1; then
+  gcloud compute addresses create google-managed-services-vuln-demo-network \
+    --global \
+    --purpose=VPC_PEERING \
+    --prefix-length=16 \
+    --network=vuln-demo-network \
+    --project="$PROJECT"
+  echo "IP range allocated for VPC peering"
+else
+  echo "VPC peering IP range already exists"
+fi
+
+# Create VPC peering connection for Cloud SQL
+echo "Creating VPC peering connection for Cloud SQL..."
+if ! gcloud services vpc-peerings list --network=vuln-demo-network --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking.googleapis.com"; then
+  gcloud services vpc-peerings connect \
+    --service=servicenetworking.googleapis.com \
+    --ranges=google-managed-services-vuln-demo-network \
+    --network=vuln-demo-network \
+    --project="$PROJECT"
+  echo "VPC peering connection created"
+else
+  echo "VPC peering connection already exists"
+fi
+
+# Create Cloud SQL PostgreSQL instance
+CLOUD_SQL_INSTANCE="vuln-demo-db"
+DB_VERSION="POSTGRES_15"
+DB_TIER="db-f1-micro"  # Smallest tier for demo
+DB_NAME="vulndb"
+DB_USER="vulnuser"
+# Generate a random password (in production, use Secret Manager)
+DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+
+echo "Creating Cloud SQL PostgreSQL instance: $CLOUD_SQL_INSTANCE"
+if ! gcloud sql instances describe "$CLOUD_SQL_INSTANCE" --project="$PROJECT" >/dev/null 2>&1; then
+  gcloud sql instances create "$CLOUD_SQL_INSTANCE" \
+    --database-version="$DB_VERSION" \
+    --tier="$DB_TIER" \
+    --region="$REGION" \
+    --network="projects/$PROJECT/global/networks/vuln-demo-network" \
+    --no-assign-ip \
+    --labels=owner=pan,purpose=vuln-demo \
+    --project="$PROJECT"
+
+  echo "Waiting for Cloud SQL instance to be ready..."
+  gcloud sql operations wait --project="$PROJECT" \
+    $(gcloud sql operations list --instance="$CLOUD_SQL_INSTANCE" --project="$PROJECT" --limit=1 --format="value(name)") || true
+
+  echo "✅ Cloud SQL instance created"
+else
+  echo "Cloud SQL instance $CLOUD_SQL_INSTANCE already exists"
+fi
+
+# Set root password
+echo "Setting postgres user password..."
+gcloud sql users set-password postgres \
+  --instance="$CLOUD_SQL_INSTANCE" \
+  --password="$DB_PASSWORD" \
+  --project="$PROJECT" || true
+
+# Create application database
+echo "Creating database: $DB_NAME"
+if ! gcloud sql databases describe "$DB_NAME" --instance="$CLOUD_SQL_INSTANCE" --project="$PROJECT" >/dev/null 2>&1; then
+  gcloud sql databases create "$DB_NAME" --instance="$CLOUD_SQL_INSTANCE" --project="$PROJECT"
+  echo "Database $DB_NAME created"
+else
+  echo "Database $DB_NAME already exists"
+fi
+
+# Create application user
+echo "Creating database user: $DB_USER"
+if ! gcloud sql users list --instance="$CLOUD_SQL_INSTANCE" --project="$PROJECT" | grep -q "^$DB_USER"; then
+  gcloud sql users create "$DB_USER" \
+    --instance="$CLOUD_SQL_INSTANCE" \
+    --password="$DB_PASSWORD" \
+    --project="$PROJECT"
+  echo "Database user $DB_USER created"
+else
+  echo "Database user $DB_USER already exists"
+fi
+
+# Get Cloud SQL connection name
+CLOUD_SQL_CONNECTION_NAME=$(gcloud sql instances describe "$CLOUD_SQL_INSTANCE" --project="$PROJECT" --format='value(connectionName)')
+CLOUD_SQL_PRIVATE_IP=$(gcloud sql instances describe "$CLOUD_SQL_INSTANCE" --project="$PROJECT" --format='value(ipAddresses[0].ipAddress)')
 
 echo "Creating GKE cluster (idempotent)"
 if ! gcloud container clusters describe "$CLUSTER" --region="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
@@ -304,6 +392,18 @@ echo ""
 echo "Storage buckets created:"
 echo "  VULNERABLE (PUBLIC): gs://$BUCKET_VULNERABLE"
 echo "  SECURE (PRIVATE):    gs://$BUCKET_SECURE"
+echo "  ML TRAINING DATA:    gs://$BUCKET_ML_TRAINING"
+echo ""
+echo "Cloud SQL PostgreSQL database created:"
+echo "  INSTANCE: $CLOUD_SQL_INSTANCE"
+echo "  CONNECTION NAME: $CLOUD_SQL_CONNECTION_NAME"
+echo "  PRIVATE IP: $CLOUD_SQL_PRIVATE_IP"
+echo "  DATABASE: $DB_NAME"
+echo "  USER: $DB_USER"
+echo "  PASSWORD: $DB_PASSWORD"
+echo ""
+echo "⚠️  IMPORTANT: Store database credentials securely!"
+echo "   Add these as Kubernetes secrets or use Google Secret Manager"
 echo ""
 echo "⚠️  WARNING: The vulnerable bucket is intentionally PUBLIC for demo purposes!"
 echo "   View public URL: https://storage.googleapis.com/$BUCKET_VULNERABLE/customer_pii.csv"

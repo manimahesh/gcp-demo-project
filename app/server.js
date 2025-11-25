@@ -6,7 +6,7 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
 const path = require('path');
@@ -32,8 +32,17 @@ const predictionClient = new PredictionServiceClient({
     apiEndpoint: `${REGION}-aiplatform.googleapis.com`
 });
 
-// Initialize in-memory SQLite database
-const db = new sqlite3.Database(':memory:');
+// Initialize PostgreSQL connection pool
+const pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'vulndb',
+    user: process.env.DB_USER || 'vulnuser',
+    password: process.env.DB_PASSWORD || 'changeme',
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+});
 
 // Middleware
 app.use(bodyParser.json());
@@ -52,50 +61,77 @@ app.use(session({
 }));
 
 // Initialize database with sample data
-function initDatabase() {
-    db.serialize(() => {
-        // Users table
-        db.run(`CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT,
-            email TEXT,
-            role TEXT DEFAULT 'user',
-            balance REAL DEFAULT 100.0
-        )`);
+async function initDatabase() {
+    try {
+        // Test database connection
+        await pool.query('SELECT NOW()');
+        console.log('✓ Connected to PostgreSQL database');
 
-        // Products table
-        db.run(`CREATE TABLE products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            price REAL,
-            description TEXT
-        )`);
+        // Create tables if they don't exist
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                email VARCHAR(255),
+                role VARCHAR(50) DEFAULT 'user',
+                balance DECIMAL(10, 2) DEFAULT 100.0
+            )
+        `);
 
-        // Orders table
-        db.run(`CREATE TABLE orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            product_id INTEGER,
-            quantity INTEGER,
-            total REAL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                price DECIMAL(10, 2) NOT NULL,
+                description TEXT
+            )
+        `);
 
-        // Insert sample users (vulnerable - plain text passwords for demo)
-        db.run(`INSERT INTO users (username, password, email, role, balance) VALUES
-            ('admin', 'admin123', 'admin@example.com', 'admin', 10000.0),
-            ('john', 'password123', 'john@example.com', 'user', 500.0),
-            ('alice', 'alice2023', 'alice@example.com', 'user', 750.0)`);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                product_id INTEGER REFERENCES products(id),
+                quantity INTEGER NOT NULL,
+                total DECIMAL(10, 2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
-        // Insert sample products
-        db.run(`INSERT INTO products (name, price, description) VALUES
-            ('Security Book', 29.99, 'Learn security basics'),
-            ('OWASP Guide', 49.99, 'Complete OWASP Top 10 guide'),
-            ('Pentesting Tools', 99.99, 'Professional toolkit')`);
+        // Check if sample data already exists
+        const userCount = await pool.query('SELECT COUNT(*) FROM users');
+        if (parseInt(userCount.rows[0].count) === 0) {
+            // Insert sample users (vulnerable - plain text passwords for demo)
+            await pool.query(`
+                INSERT INTO users (username, password, email, role, balance) VALUES
+                ('admin', 'admin123', 'admin@example.com', 'admin', 10000.0),
+                ('john', 'password123', 'john@example.com', 'user', 500.0),
+                ('alice', 'alice2023', 'alice@example.com', 'user', 750.0)
+            `);
+        }
+
+        const productCount = await pool.query('SELECT COUNT(*) FROM products');
+        if (parseInt(productCount.rows[0].count) === 0) {
+            // Insert sample products
+            await pool.query(`
+                INSERT INTO products (name, price, description) VALUES
+                ('Security Book', 29.99, 'Learn security basics'),
+                ('OWASP Guide', 49.99, 'Complete OWASP Top 10 guide'),
+                ('Pentesting Tools', 99.99, 'Professional toolkit')
+            `);
+        }
 
         console.log('✓ Database initialized with sample data');
-    });
+    } catch (error) {
+        console.error('✗ Database initialization failed:', error.message);
+        console.error('  Make sure Cloud SQL instance is running and accessible');
+        console.error('  Connection details:', {
+            host: process.env.DB_HOST || 'localhost',
+            database: process.env.DB_NAME || 'vulndb',
+            user: process.env.DB_USER || 'vulnuser'
+        });
+    }
 }
 
 initDatabase();
@@ -105,27 +141,28 @@ initDatabase();
 // ====================================================================================
 
 // VULNERABLE: Access any user's profile without authorization
-app.get('/api/vulnerable/user/:id', (req, res) => {
+app.get('/api/vulnerable/user/:id', async (req, res) => {
     const userId = req.params.id;
 
-    db.get('SELECT id, username, email, role, balance FROM users WHERE id = ?', [userId], (err, user) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        if (!user) {
+    try {
+        const result = await pool.query('SELECT id, username, email, role, balance FROM users WHERE id = $1', [userId]);
+
+        if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
 
         res.json({
             vulnerability: 'Broken Access Control',
             issue: 'No authorization check - anyone can view any user data!',
-            data: user
+            data: result.rows[0]
         });
-    });
+    } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // SECURE: Proper authorization check
-app.get('/api/secure/user/:id', (req, res) => {
+app.get('/api/secure/user/:id', async (req, res) => {
     const userId = req.params.id;
     const currentUserId = req.session.userId;
 
@@ -133,11 +170,15 @@ app.get('/api/secure/user/:id', (req, res) => {
         return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    // Check if user is accessing their own data or is admin
-    db.get('SELECT role FROM users WHERE id = ?', [currentUserId], (err, currentUser) => {
-        if (err || !currentUser) {
+    try {
+        // Check if user is accessing their own data or is admin
+        const currentUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [currentUserId]);
+
+        if (currentUserResult.rows.length === 0) {
             return res.status(401).json({ error: 'Invalid session' });
         }
+
+        const currentUser = currentUserResult.rows[0];
 
         if (currentUserId != userId && currentUser.role !== 'admin') {
             return res.status(403).json({
@@ -146,17 +187,19 @@ app.get('/api/secure/user/:id', (req, res) => {
             });
         }
 
-        db.get('SELECT id, username, email, role, balance FROM users WHERE id = ?', [userId], (err, user) => {
-            if (err || !user) {
-                return res.status(404).json({ error: 'User not found' });
-            }
+        const userResult = await pool.query('SELECT id, username, email, role, balance FROM users WHERE id = $1', [userId]);
 
-            res.json({
-                security: 'Access authorized',
-                data: user
-            });
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({
+            security: 'Access authorized',
+            data: userResult.rows[0]
         });
-    });
+    } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // ====================================================================================
@@ -164,26 +207,25 @@ app.get('/api/secure/user/:id', (req, res) => {
 // ====================================================================================
 
 // VULNERABLE: Store password in plain text
-app.post('/api/vulnerable/register', (req, res) => {
+app.post('/api/vulnerable/register', async (req, res) => {
     const { username, password, email } = req.body;
 
-    db.run(
-        'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
-        [username, password, email], // Plain text password!
-        function(err) {
-            if (err) {
-                return res.status(400).json({ error: 'Username already exists' });
-            }
+    try {
+        const result = await pool.query(
+            'INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id',
+            [username, password, email] // Plain text password!
+        );
 
-            res.json({
-                vulnerability: 'Cryptographic Failure',
-                issue: 'Password stored in PLAIN TEXT!',
-                userId: this.lastID,
-                warning: 'Never do this in production!',
-                storedPassword: password
-            });
-        }
-    );
+        res.json({
+            vulnerability: 'Cryptographic Failure',
+            issue: 'Password stored in PLAIN TEXT!',
+            userId: result.rows[0].id,
+            warning: 'Never do this in production!',
+            storedPassword: password
+        });
+    } catch (err) {
+        return res.status(400).json({ error: 'Username already exists' });
+    }
 });
 
 // SECURE: Hash password with bcrypt
@@ -193,23 +235,18 @@ app.post('/api/secure/register', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        db.run(
-            'INSERT INTO users (username, password, email) VALUES (?, ?, ?)',
-            [username, hashedPassword, email],
-            function(err) {
-                if (err) {
-                    return res.status(400).json({ error: 'Username already exists' });
-                }
-
-                res.json({
-                    security: 'Password securely hashed with bcrypt (cost factor: 12)',
-                    userId: this.lastID,
-                    hashedPassword: hashedPassword.substring(0, 20) + '...'
-                });
-            }
+        const result = await pool.query(
+            'INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id',
+            [username, hashedPassword, email]
         );
+
+        res.json({
+            security: 'Password securely hashed with bcrypt (cost factor: 12)',
+            userId: result.rows[0].id,
+            hashedPassword: hashedPassword.substring(0, 20) + '...'
+        });
     } catch (error) {
-        res.status(500).json({ error: 'Registration failed' });
+        res.status(500).json({ error: error.code === '23505' ? 'Username already exists' : 'Registration failed' });
     }
 });
 
@@ -218,23 +255,17 @@ app.post('/api/secure/register', async (req, res) => {
 // ====================================================================================
 
 // VULNERABLE: SQL Injection
-app.post('/api/vulnerable/login', (req, res) => {
+app.post('/api/vulnerable/login', async (req, res) => {
     const { username, password } = req.body;
 
     // DANGEROUS: String concatenation allows SQL injection
     const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
 
-    db.get(query, [], (err, user) => {
-        if (err) {
-            return res.status(500).json({
-                error: 'Database error',
-                vulnerability: 'SQL Injection',
-                executedQuery: query,
-                tip: "Try: username = admin' -- and any password"
-            });
-        }
+    try {
+        const result = await pool.query(query);
 
-        if (user) {
+        if (result.rows.length > 0) {
+            const user = result.rows[0];
             req.session.userId = user.id;
             res.json({
                 success: true,
@@ -250,25 +281,32 @@ app.post('/api/vulnerable/login', (req, res) => {
                 hint: "Try: username = admin' OR '1'='1' -- "
             });
         }
-    });
+    } catch (err) {
+        return res.status(500).json({
+            error: 'Database error',
+            vulnerability: 'SQL Injection',
+            executedQuery: query,
+            tip: "Try: username = admin' -- and any password"
+        });
+    }
 });
 
 // SECURE: Parameterized query prevents SQL injection
 app.post('/api/secure/login', async (req, res) => {
     const { username, password } = req.body;
 
-    // Parameterized query
-    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
+    try {
+        // Parameterized query
+        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
 
-        if (!user) {
+        if (result.rows.length === 0) {
             return res.status(401).json({
                 error: 'Invalid credentials',
                 security: 'Parameterized query used - SQL injection prevented!'
             });
         }
+
+        const user = result.rows[0];
 
         // For demo purposes, also check plain text (in real app, always use hashed)
         const validPassword = password === user.password;
@@ -286,7 +324,9 @@ app.post('/api/secure/login', async (req, res) => {
                 security: 'SQL injection attempts will fail!'
             });
         }
-    });
+    } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // VULNERABLE: Command Injection
@@ -340,40 +380,44 @@ app.post('/api/secure/ping', (req, res) => {
 // ====================================================================================
 
 // VULNERABLE: No rate limiting, negative quantities allowed
-app.post('/api/vulnerable/purchase', (req, res) => {
+app.post('/api/vulnerable/purchase', async (req, res) => {
     const { productId, quantity } = req.body;
 
-    // No business logic validation!
-    db.get('SELECT * FROM products WHERE id = ?', [productId], (err, product) => {
-        if (err || !product) {
+    try {
+        // No business logic validation!
+        const productResult = await pool.query('SELECT * FROM products WHERE id = $1', [productId]);
+
+        if (productResult.rows.length === 0) {
             return res.status(404).json({ error: 'Product not found' });
         }
 
+        const product = productResult.rows[0];
         const total = product.price * quantity; // Accepts negative numbers!
 
-        db.run(
-            'INSERT INTO orders (user_id, product_id, quantity, total) VALUES (?, ?, ?, ?)',
-            [req.session.userId || 1, productId, quantity, total],
-            function(err) {
-                res.json({
-                    vulnerability: 'Insecure Design',
-                    issue: 'No validation for negative quantities or excessive orders!',
-                    order: {
-                        id: this.lastID,
-                        product: product.name,
-                        quantity: quantity,
-                        total: total
-                    },
-                    tip: 'Try negative quantity to get money instead of paying!',
-                    warning: 'Missing business logic validation'
-                });
-            }
+        const orderResult = await pool.query(
+            'INSERT INTO orders (user_id, product_id, quantity, total) VALUES ($1, $2, $3, $4) RETURNING id',
+            [req.session.userId || 1, productId, quantity, total]
         );
-    });
+
+        res.json({
+            vulnerability: 'Insecure Design',
+            issue: 'No validation for negative quantities or excessive orders!',
+            order: {
+                id: orderResult.rows[0].id,
+                product: product.name,
+                quantity: quantity,
+                total: total
+            },
+            tip: 'Try negative quantity to get money instead of paying!',
+            warning: 'Missing business logic validation'
+        });
+    } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // SECURE: Proper business logic validation
-app.post('/api/secure/purchase', (req, res) => {
+app.post('/api/secure/purchase', async (req, res) => {
     const { productId, quantity } = req.body;
 
     // Validate business rules
@@ -384,33 +428,33 @@ app.post('/api/secure/purchase', (req, res) => {
         });
     }
 
-    db.get('SELECT * FROM products WHERE id = ?', [productId], (err, product) => {
-        if (err || !product) {
+    try {
+        const productResult = await pool.query('SELECT * FROM products WHERE id = $1', [productId]);
+
+        if (productResult.rows.length === 0) {
             return res.status(404).json({ error: 'Product not found' });
         }
 
+        const product = productResult.rows[0];
         const total = product.price * quantity;
 
-        db.run(
-            'INSERT INTO orders (user_id, product_id, quantity, total) VALUES (?, ?, ?, ?)',
-            [req.session.userId || 1, productId, quantity, total],
-            function(err) {
-                if (err) {
-                    return res.status(500).json({ error: 'Order failed' });
-                }
-
-                res.json({
-                    security: 'Secure order with business logic validation',
-                    order: {
-                        id: this.lastID,
-                        product: product.name,
-                        quantity: quantity,
-                        total: total.toFixed(2)
-                    }
-                });
-            }
+        const orderResult = await pool.query(
+            'INSERT INTO orders (user_id, product_id, quantity, total) VALUES ($1, $2, $3, $4) RETURNING id',
+            [req.session.userId || 1, productId, quantity, total]
         );
-    });
+
+        res.json({
+            security: 'Secure order with business logic validation',
+            order: {
+                id: orderResult.rows[0].id,
+                product: product.name,
+                quantity: quantity,
+                total: total.toFixed(2)
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({ error: 'Order failed' });
+    }
 });
 
 // ====================================================================================
@@ -491,23 +535,23 @@ app.post('/api/secure/fetch-url', (req, res) => {
 // ====================================================================================
 
 // Get all users (for testing access control)
-app.get('/api/users', (req, res) => {
-    db.all('SELECT id, username, email, role FROM users', [], (err, users) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json({ users });
-    });
+app.get('/api/users', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, username, email, role FROM users');
+        res.json({ users: result.rows });
+    } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // Get all products
-app.get('/api/products', (req, res) => {
-    db.all('SELECT * FROM products', [], (err, products) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json({ products });
-    });
+app.get('/api/products', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM products');
+        res.json({ products: result.rows });
+    } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // Logout
@@ -517,36 +561,47 @@ app.post('/api/logout', (req, res) => {
 });
 
 // Current session info
-app.get('/api/session', (req, res) => {
+app.get('/api/session', async (req, res) => {
     if (req.session.userId) {
-        db.get('SELECT id, username, role FROM users WHERE id = ?', [req.session.userId], (err, user) => {
-            res.json({ authenticated: true, user });
-        });
+        try {
+            const result = await pool.query('SELECT id, username, role FROM users WHERE id = $1', [req.session.userId]);
+            res.json({ authenticated: true, user: result.rows[0] });
+        } catch (err) {
+            res.json({ authenticated: false });
+        }
     } else {
         res.json({ authenticated: false });
     }
 });
 
 // Reset demo data
-app.post('/api/reset', (req, res) => {
-    db.serialize(() => {
-        db.run('DELETE FROM users');
-        db.run('DELETE FROM products');
-        db.run('DELETE FROM orders');
+app.post('/api/reset', async (req, res) => {
+    try {
+        // Delete all data
+        await pool.query('DELETE FROM orders');
+        await pool.query('DELETE FROM products');
+        await pool.query('DELETE FROM users');
 
-        db.run(`INSERT INTO users (username, password, email, role, balance) VALUES
+        // Re-insert sample data
+        await pool.query(`
+            INSERT INTO users (username, password, email, role, balance) VALUES
             ('admin', 'admin123', 'admin@example.com', 'admin', 10000.0),
             ('john', 'password123', 'john@example.com', 'user', 500.0),
-            ('alice', 'alice2023', 'alice@example.com', 'user', 750.0)`);
+            ('alice', 'alice2023', 'alice@example.com', 'user', 750.0)
+        `);
 
-        db.run(`INSERT INTO products (name, price, description) VALUES
+        await pool.query(`
+            INSERT INTO products (name, price, description) VALUES
             ('Security Book', 29.99, 'Learn security basics'),
             ('OWASP Guide', 49.99, 'Complete OWASP Top 10 guide'),
-            ('Pentesting Tools', 99.99, 'Professional toolkit')`);
-    });
+            ('Pentesting Tools', 99.99, 'Professional toolkit')
+        `);
 
-    req.session.destroy();
-    res.json({ message: 'Demo data reset successfully' });
+        req.session.destroy();
+        res.json({ message: 'Demo data reset successfully' });
+    } catch (err) {
+        res.status(500).json({ error: 'Reset failed', details: err.message });
+    }
 });
 
 // ====================================================================================

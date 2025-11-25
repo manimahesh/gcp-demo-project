@@ -29,6 +29,16 @@ spec:
               value: "production"
             - name: GCP_PROJECT
               value: "prod-le9fxx2ruhbc"
+            - name: DB_HOST
+              value: "10.0.0.3"  # Cloud SQL private IP - update after provisioning
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "vulndb"
+            - name: DB_USER
+              value: "vulnuser"
+            - name: DB_PASSWORD
+              value: "REPLACE_WITH_DB_PASSWORD"  # Update after running provision script
           # Recommended security best-practices for production demos:
           securityContext:
             runAsUser: 1000
