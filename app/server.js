@@ -34,7 +34,7 @@ const predictionClient = new PredictionServiceClient({
 
 // Initialize PostgreSQL connection pool
 const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
+    host: process.env.DB_HOST || '10.93.64.3',
     port: process.env.DB_PORT || 5432,
     database: process.env.DB_NAME || 'vulndb',
     user: process.env.DB_USER || 'vulnuser',
