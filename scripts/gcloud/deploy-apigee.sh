@@ -93,7 +93,7 @@ create_apigee_organization() {
 
     # Check if organization already exists and is accessible
     local org_state
-    org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+    org_state=$(gcloud alpha apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
 
     if [[ -n "${org_state}" ]]; then
         if [[ "${org_state}" == "ACTIVE" ]]; then
@@ -105,7 +105,7 @@ create_apigee_organization() {
 
             # Wait for organization to become active
             for i in {1..60}; do
-                org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+                org_state=$(gcloud alpha apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
                 if [[ "${org_state}" == "ACTIVE" ]]; then
                     log_success "Apigee organization is now ACTIVE"
                     return 0
@@ -146,7 +146,7 @@ create_apigee_organization() {
             log_info "Checking if organization is accessible in current project..."
 
             # Try to describe the organization again
-            org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+            org_state=$(gcloud alpha apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
             if [[ -n "${org_state}" ]]; then
                 log_success "Organization is accessible in current project (state: ${org_state})"
                 if [[ "${org_state}" == "ACTIVE" ]]; then
@@ -171,7 +171,7 @@ create_apigee_organization() {
 
     # Wait for operation to complete (check every 30 seconds)
     for i in {1..60}; do
-        org_state=$(gcloud apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
+        org_state=$(gcloud alpha apigee organizations describe "${APIGEE_ORG}" --format="value(state)" 2>/dev/null)
         if [[ "${org_state}" == "ACTIVE" ]]; then
             log_success "Apigee organization created successfully"
             return 0
@@ -188,7 +188,7 @@ create_apigee_environment() {
     log_info "Creating Apigee environment: ${APIGEE_ENV}..."
 
     # Check if environment exists
-    if gcloud apigee environments describe "${APIGEE_ENV}" \
+    if gcloud alpha apigee environments describe "${APIGEE_ENV}" \
         --organization="${APIGEE_ORG}" \
         --format="value(name)" 2>/dev/null | grep -q "${APIGEE_ENV}"; then
         log_warning "Apigee environment ${APIGEE_ENV} already exists"
@@ -196,7 +196,7 @@ create_apigee_environment() {
     fi
 
     # Create environment
-    gcloud apigee environments create "${APIGEE_ENV}" \
+    gcloud alpha apigee environments create "${APIGEE_ENV}" \
         --organization="${APIGEE_ORG}" \
         --display-name="Production Environment"
 
@@ -209,7 +209,7 @@ create_apigee_instance() {
     INSTANCE_NAME="apigee-instance-${REGION}"
 
     # Check if instance exists
-    if gcloud apigee instances describe "${INSTANCE_NAME}" \
+    if gcloud alpha apigee instances describe "${INSTANCE_NAME}" \
         --organization="${APIGEE_ORG}" \
         --format="value(name)" 2>/dev/null | grep -q "${INSTANCE_NAME}"; then
         log_warning "Apigee instance ${INSTANCE_NAME} already exists"
@@ -219,7 +219,7 @@ create_apigee_instance() {
     log_info "Creating runtime instance (this may take 30-45 minutes)..."
 
     # Create instance
-    gcloud apigee instances create "${INSTANCE_NAME}" \
+    gcloud alpha apigee instances create "${INSTANCE_NAME}" \
         --organization="${APIGEE_ORG}" \
         --location="${REGION}" \
         --async
@@ -228,14 +228,14 @@ create_apigee_instance() {
 
     # Wait for instance to be ready
     for i in {1..90}; do
-        if gcloud apigee instances describe "${INSTANCE_NAME}" \
+        if gcloud alpha apigee instances describe "${INSTANCE_NAME}" \
             --organization="${APIGEE_ORG}" \
             --format="value(state)" 2>/dev/null | grep -q "ACTIVE"; then
             log_success "Apigee instance created successfully"
 
             # Attach environment to instance
             log_info "Attaching environment to instance..."
-            gcloud apigee environments attach "${APIGEE_ENV}" \
+            gcloud alpha apigee environments attach "${APIGEE_ENV}" \
                 --instance="${INSTANCE_NAME}" \
                 --organization="${APIGEE_ORG}"
 
