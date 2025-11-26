@@ -4,6 +4,8 @@
  * WARNING: This code contains intentional vulnerabilities for educational purposes only!
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Pool } = require('pg');
@@ -512,8 +514,8 @@ app.post('/api/vulnerable/fetch-url', async (req, res) => {
 app.post('/api/secure/apigee/fetch-url', async (req, res) => {
     const { url, apiKey } = req.body;
 
-    // Simulate Apigee API Key validation
-    const validApiKeys = ['zCXedytPFXUsE5GeVYSgNOEHIKpuVeAQCfqBIgxcAwDDurph', 'production-key-67890'];
+    // Simulate Apigee API Key validation - read from environment variables
+    const validApiKeys = (process.env.VALID_API_KEYS || '').split(',').map(key => key.trim()).filter(key => key);
 
     if (!apiKey || !validApiKeys.includes(apiKey)) {
         return res.status(401).json({
