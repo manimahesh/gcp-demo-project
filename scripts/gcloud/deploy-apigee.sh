@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # ====================================================================================
-# Google Cloud Apigee Deployment Script
+# Google Cloud Apigee Deployment Script (REST API Version)
 # ====================================================================================
 # This script provisions Google Cloud Apigee for API Gateway and SSRF protection
+# using direct REST API calls instead of gcloud CLI
 #
 # Prerequisites:
-# - gcloud CLI installed and authenticated
+# - gcloud CLI installed and authenticated (for access token)
 # - Appropriate IAM permissions (Apigee Admin, Organization Admin)
 # - GCP project with billing enabled
 # - Apigee API enabled in the project
@@ -24,6 +25,7 @@ APIGEE_ENV="production"
 APIGEE_ORG="${PROJECT_ID}"
 API_PROXY_NAME="secure-url-fetcher"
 ANALYTICS_REGION="us-central1"
+APIGEE_API="https://apigee.googleapis.com/v1"
 
 # Colors for output
 RED='\033[0;31m'
@@ -49,6 +51,11 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Get access token for API calls
+get_access_token() {
+    gcloud auth print-access-token 2>/dev/null
+}
+
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
@@ -58,6 +65,17 @@ check_prerequisites() {
         exit 1
     fi
 
+    # Check curl
+    if ! command -v curl &> /dev/null; then
+        log_error "curl is not installed. Please install curl."
+        exit 1
+    fi
+
+    # Check jq
+    if ! command -v jq &> /dev/null; then
+        log_warning "jq is not installed. JSON parsing will be limited."
+    fi
+
     # Check authentication
     if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q .; then
         log_error "No active gcloud authentication. Run: gcloud auth login"
@@ -65,7 +83,7 @@ check_prerequisites() {
     fi
 
     # Set project
-    gcloud config set project "${PROJECT_ID}"
+    gcloud config set project "${PROJECT_ID}" >/dev/null 2>&1
     log_success "Prerequisites check passed"
 }
 
@@ -91,27 +109,58 @@ enable_apis() {
 create_apigee_organization() {
     log_info "Creating Apigee organization..."
 
-    # Check if organization already exists and is accessible
-    local org_state
-    org_state=$(gcloud apigee organizations list --format="get(state)" --filter="name=${APIGEE_ORG}" 2>/dev/null)
+    local ACCESS_TOKEN
+    ACCESS_TOKEN=$(get_access_token)
 
-    if [[ -n "${org_state}" ]]; then
-        if [[ "${org_state}" == "ACTIVE" ]]; then
+    # Check if organization already exists
+    log_info "Checking if organization exists..."
+    local org_response
+    org_response=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        "${APIGEE_API}/organizations/${APIGEE_ORG}")
+
+    local http_code=$(echo "$org_response" | tail -n1)
+    local response_body=$(echo "$org_response" | sed '$d')
+
+    if [[ "${http_code}" == "200" ]]; then
+        # Organization exists, check state
+        local state
+        if command -v jq &> /dev/null; then
+            state=$(echo "${response_body}" | jq -r '.state // empty')
+        else
+            state=$(echo "${response_body}" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)
+        fi
+
+        if [[ "${state}" == "ACTIVE" ]]; then
             log_success "Apigee organization ${APIGEE_ORG} already exists and is ACTIVE"
             return 0
         else
-            log_warning "Apigee organization ${APIGEE_ORG} exists but is in state: ${org_state}"
+            log_warning "Organization exists but is in state: ${state}"
             log_info "Waiting for organization to become ACTIVE..."
 
-            # Wait for organization to become active
+            # Wait for ACTIVE state
             for i in {1..60}; do
-                org_state=$(gcloud apigee organizations list --format="get(state)" --filter="name=${APIGEE_ORG}" 2>/dev/null)
-                if [[ "${org_state}" == "ACTIVE" ]]; then
-                    log_success "Apigee organization is now ACTIVE"
-                    return 0
-                fi
-                log_info "Still waiting for ACTIVE state... (attempt $i/60, current: ${org_state})"
                 sleep 30
+                org_response=$(curl -s -w "\n%{http_code}" \
+                    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                    "${APIGEE_API}/organizations/${APIGEE_ORG}")
+
+                http_code=$(echo "$org_response" | tail -n1)
+                response_body=$(echo "$org_response" | sed '$d')
+
+                if [[ "${http_code}" == "200" ]]; then
+                    if command -v jq &> /dev/null; then
+                        state=$(echo "${response_body}" | jq -r '.state // empty')
+                    else
+                        state=$(echo "${response_body}" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)
+                    fi
+
+                    if [[ "${state}" == "ACTIVE" ]]; then
+                        log_success "Organization is now ACTIVE"
+                        return 0
+                    fi
+                fi
+                log_info "Still waiting... (attempt $i/60, state: ${state:-unknown})"
             done
 
             log_error "Organization did not reach ACTIVE state"
@@ -119,95 +168,162 @@ create_apigee_organization() {
         fi
     fi
 
+    # Organization doesn't exist, create it
     log_info "Creating new Apigee organization (this may take 15-30 minutes)..."
     log_info "Using VPC network: vuln-demo-network"
 
-    # Ensure the network exists
+    # Ensure VPC network exists
     if ! gcloud compute networks describe vuln-demo-network --project="${PROJECT_ID}" >/dev/null 2>&1; then
         log_error "VPC network 'vuln-demo-network' not found. Please run provision_gcp.sh first."
         exit 1
     fi
 
-    # Create organization using alpha command with error handling
-    local provision_output
-    local provision_exit_code
+    # Get VPC network full path
+    local vpc_network="projects/${PROJECT_ID}/global/networks/vuln-demo-network"
 
-    provision_output=$(gcloud alpha apigee organizations provision \
-        --runtime-location="${ANALYTICS_REGION}" \
-        --analytics-region="${ANALYTICS_REGION}" \
-        --authorized-network="vuln-demo-network" \
-        --async \
-        --project="${PROJECT_ID}" 2>&1) || provision_exit_code=$?
+    # Create organization
+    local create_response
+    create_response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${APIGEE_API}/organizations?parent=projects/${PROJECT_ID}" \
+        -d "{
+            \"name\": \"organizations/${APIGEE_ORG}\",
+            \"displayName\": \"${APIGEE_ORG}\",
+            \"description\": \"Apigee organization for SSRF protection demo\",
+            \"runtimeType\": \"CLOUD\",
+            \"analyticsRegion\": \"${ANALYTICS_REGION}\",
+            \"authorizedNetwork\": \"${vpc_network}\",
+            \"runtimeDatabaseEncryptionKeyName\": \"\"
+        }")
 
-    # Check if provisioning failed due to conflict (organization already exists globally)
-    if [[ ${provision_exit_code} -ne 0 ]]; then
-        if echo "${provision_output}" | grep -q "already associated with another project\|already exists"; then
-            log_warning "Apigee organization name '${APIGEE_ORG}' is already in use globally"
-            log_info "Checking if organization is accessible in current project..."
+    http_code=$(echo "$create_response" | tail -n1)
+    response_body=$(echo "$create_response" | sed '$d')
 
-            # Try to describe the organization again
-            org_state=$(gcloud apigee organizations list --format="get(state)" --filter="name=${APIGEE_ORG}" 2>/dev/null)
-            if [[ -n "${org_state}" ]]; then
-                log_success "Organization is accessible in current project (state: ${org_state})"
-                if [[ "${org_state}" == "ACTIVE" ]]; then
-                    return 0
-                fi
-            else
-                log_error "Organization '${APIGEE_ORG}' is claimed by another project and not accessible"
-                log_error "Please either:"
-                log_error "  1. Use a different organization name by setting APIGEE_ORG environment variable"
-                log_error "  2. Delete the existing organization if you have access to it"
-                log_error "  3. Contact your GCP administrator for access"
-                exit 1
-            fi
+    if [[ "${http_code}" =~ ^(200|201)$ ]]; then
+        log_info "Organization creation initiated..."
+        log_info "Response: ${response_body}"
+    elif [[ "${http_code}" == "409" ]] || echo "${response_body}" | grep -q "already exists"; then
+        log_warning "Organization already exists (conflict)"
+
+        # Check if we can access it
+        org_response=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            "${APIGEE_API}/organizations/${APIGEE_ORG}")
+
+        http_code=$(echo "$org_response" | tail -n1)
+
+        if [[ "${http_code}" == "200" ]]; then
+            log_success "Organization is accessible in current project"
+            return 0
         else
-            log_error "Failed to provision Apigee organization:"
-            echo "${provision_output}"
+            log_error "Organization '${APIGEE_ORG}' is claimed by another project and not accessible"
+            log_error "Please either:"
+            log_error "  1. Use a different organization name by setting APIGEE_ORG environment variable"
+            log_error "  2. Delete the existing organization if you have access to it"
+            log_error "  3. Contact your GCP administrator for access"
             exit 1
         fi
+    else
+        log_error "Failed to create organization. HTTP ${http_code}"
+        log_error "Response: ${response_body}"
+        exit 1
     fi
 
-    log_info "Waiting for organization creation to complete..."
+    # Wait for organization to become ACTIVE
+    log_info "Waiting for organization to become ACTIVE (this may take 15-30 minutes)..."
 
-    # Wait for operation to complete (check every 30 seconds)
     for i in {1..60}; do
-        org_state=$(gcloud apigee organizations list --format="get(state)" --filter="name=${APIGEE_ORG}" 2>/dev/null)
-        if [[ "${org_state}" == "ACTIVE" ]]; then
-            log_success "Apigee organization created successfully"
-            return 0
-        fi
-        log_info "Still provisioning... (attempt $i/60, current state: ${org_state:-unknown})"
         sleep 30
+        ACCESS_TOKEN=$(get_access_token)  # Refresh token
+
+        org_response=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            "${APIGEE_API}/organizations/${APIGEE_ORG}")
+
+        http_code=$(echo "$org_response" | tail -n1)
+        response_body=$(echo "$org_response" | sed '$d')
+
+        if [[ "${http_code}" == "200" ]]; then
+            if command -v jq &> /dev/null; then
+                state=$(echo "${response_body}" | jq -r '.state // empty')
+            else
+                state=$(echo "${response_body}" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)
+            fi
+
+            if [[ "${state}" == "ACTIVE" ]]; then
+                log_success "Apigee organization created successfully"
+                return 0
+            fi
+            log_info "Still provisioning... (attempt $i/60, state: ${state:-unknown})"
+        else
+            log_info "Still provisioning... (attempt $i/60)"
+        fi
     done
 
-    log_error "Apigee organization creation timed out"
+    log_error "Organization creation timed out"
     exit 1
 }
 
 create_apigee_environment() {
     log_info "Creating Apigee environment: ${APIGEE_ENV}..."
 
+    local ACCESS_TOKEN
+    ACCESS_TOKEN=$(get_access_token)
+
     # Check if environment exists
-    if gcloud apigee environments list --organization="${APIGEE_ORG}" --format="get(name)" 2>/dev/null | grep -q "^${APIGEE_ENV}$"; then
+    local env_response
+    env_response=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        "${APIGEE_API}/organizations/${APIGEE_ORG}/environments/${APIGEE_ENV}")
+
+    local http_code=$(echo "$env_response" | tail -n1)
+
+    if [[ "${http_code}" == "200" ]]; then
         log_warning "Apigee environment ${APIGEE_ENV} already exists"
         return 0
     fi
 
     # Create environment
-    gcloud apigee environments create "${APIGEE_ENV}" \
-        --organization="${APIGEE_ORG}" \
-        --display-name="Production Environment"
+    local create_response
+    create_response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${APIGEE_API}/organizations/${APIGEE_ORG}/environments" \
+        -d "{
+            \"name\": \"${APIGEE_ENV}\",
+            \"displayName\": \"Production Environment\",
+            \"description\": \"Production environment for SSRF protection demo\"
+        }")
 
-    log_success "Apigee environment created"
+    http_code=$(echo "$create_response" | tail -n1)
+    response_body=$(echo "$create_response" | sed '$d')
+
+    if [[ "${http_code}" =~ ^(200|201)$ ]]; then
+        log_success "Apigee environment created successfully"
+    else
+        log_error "Failed to create environment. HTTP ${http_code}"
+        log_error "Response: ${response_body}"
+        exit 1
+    fi
 }
 
 create_apigee_instance() {
     log_info "Creating Apigee runtime instance..."
 
-    INSTANCE_NAME="apigee-instance-${REGION}"
+    local INSTANCE_NAME="apigee-instance-${REGION}"
+    local ACCESS_TOKEN
+    ACCESS_TOKEN=$(get_access_token)
 
     # Check if instance exists
-    if gcloud apigee instances list --organization="${APIGEE_ORG}" --format="get(name)" 2>/dev/null | grep -q "^${INSTANCE_NAME}$"; then
+    local inst_response
+    inst_response=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        "${APIGEE_API}/organizations/${APIGEE_ORG}/instances/${INSTANCE_NAME}")
+
+    local http_code=$(echo "$inst_response" | tail -n1)
+
+    if [[ "${http_code}" == "200" ]]; then
         log_warning "Apigee instance ${INSTANCE_NAME} already exists"
         return 0
     fi
@@ -215,31 +331,79 @@ create_apigee_instance() {
     log_info "Creating runtime instance (this may take 30-45 minutes)..."
 
     # Create instance
-    gcloud apigee instances create "${INSTANCE_NAME}" \
-        --organization="${APIGEE_ORG}" \
-        --location="${REGION}" \
-        --async
+    local create_response
+    create_response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${APIGEE_API}/organizations/${APIGEE_ORG}/instances" \
+        -d "{
+            \"name\": \"${INSTANCE_NAME}\",
+            \"location\": \"${REGION}\",
+            \"description\": \"Apigee runtime instance for ${REGION}\"
+        }")
 
-    log_info "Waiting for instance creation..."
+    http_code=$(echo "$create_response" | tail -n1)
+    response_body=$(echo "$create_response" | sed '$d')
+
+    if [[ "${http_code}" =~ ^(200|201)$ ]]; then
+        log_info "Instance creation initiated"
+    else
+        log_error "Failed to create instance. HTTP ${http_code}"
+        log_error "Response: ${response_body}"
+        exit 1
+    fi
 
     # Wait for instance to be ready
+    log_info "Waiting for instance creation..."
+
     for i in {1..90}; do
-        local instance_state
-        instance_state=$(gcloud apigee instances list --organization="${APIGEE_ORG}" --format="get(state)" --filter="name:${INSTANCE_NAME}" 2>/dev/null)
-        if [[ "${instance_state}" == "ACTIVE" ]]; then
-            log_success "Apigee instance created successfully"
-
-            # Attach environment to instance
-            log_info "Attaching environment to instance..."
-            gcloud apigee environments attach "${APIGEE_ENV}" \
-                --instance="${INSTANCE_NAME}" \
-                --organization="${APIGEE_ORG}"
-
-            log_success "Environment attached to instance"
-            return 0
-        fi
-        log_info "Still creating instance... (attempt $i/90, state: ${instance_state:-unknown})"
         sleep 30
+        ACCESS_TOKEN=$(get_access_token)  # Refresh token
+
+        inst_response=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            "${APIGEE_API}/organizations/${APIGEE_ORG}/instances/${INSTANCE_NAME}")
+
+        http_code=$(echo "$inst_response" | tail -n1)
+        response_body=$(echo "$inst_response" | sed '$d')
+
+        if [[ "${http_code}" == "200" ]]; then
+            local state
+            if command -v jq &> /dev/null; then
+                state=$(echo "${response_body}" | jq -r '.state // empty')
+            else
+                state=$(echo "${response_body}" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)
+            fi
+
+            if [[ "${state}" == "ACTIVE" ]]; then
+                log_success "Apigee instance created successfully"
+
+                # Attach environment to instance
+                log_info "Attaching environment to instance..."
+
+                local attach_response
+                attach_response=$(curl -s -w "\n%{http_code}" -X POST \
+                    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    "${APIGEE_API}/organizations/${APIGEE_ORG}/instances/${INSTANCE_NAME}/attachments" \
+                    -d "{
+                        \"environment\": \"${APIGEE_ENV}\"
+                    }")
+
+                http_code=$(echo "$attach_response" | tail -n1)
+
+                if [[ "${http_code}" =~ ^(200|201)$ ]]; then
+                    log_success "Environment attached to instance"
+                else
+                    log_warning "Failed to attach environment (may need manual attachment)"
+                fi
+
+                return 0
+            fi
+            log_info "Still creating instance... (attempt $i/90, state: ${state:-unknown})"
+        else
+            log_info "Still creating instance... (attempt $i/90)"
+        fi
     done
 
     log_error "Instance creation timed out"
@@ -384,10 +548,7 @@ setup_api_products() {
 
 configure_monitoring() {
     log_info "Configuring Cloud Monitoring for Apigee..."
-
-    # Create log-based metrics
     log_info "Setting up log-based metrics for SSRF detection"
-
     log_success "Monitoring configured"
 }
 
@@ -426,12 +587,13 @@ display_summary() {
     echo "📚 Documentation:"
     echo "  - Apigee Docs: https://cloud.google.com/apigee/docs"
     echo "  - Security Best Practices: https://cloud.google.com/apigee/docs/api-platform/security"
-    echo "  - VPC Integration: https://cloud.google.com/apigee/docs/api-platform/get-started/install-cli"
+    echo "  - Apigee REST API: https://cloud.google.com/apigee/docs/reference/apis/apigee/rest"
     echo ""
     echo "⚠️  Important Notes:"
     echo "  - Apigee organization is integrated with VPC: vuln-demo-network"
     echo "  - Ensure firewall rules allow Apigee runtime to backend services"
     echo "  - Use Cloud NAT if backend services need outbound internet access"
+    echo "  - This script uses Apigee REST API for reliable provisioning"
     echo ""
     echo "=========================================================================="
 }
@@ -440,7 +602,7 @@ display_summary() {
 main() {
     echo ""
     echo "=========================================================================="
-    echo "  Google Cloud Apigee Deployment Script"
+    echo "  Google Cloud Apigee Deployment Script (REST API Version)"
     echo "  Project: ${PROJECT_ID}"
     echo "  Region: ${REGION}"
     echo "=========================================================================="
