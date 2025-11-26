@@ -513,7 +513,7 @@ app.post('/api/secure/apigee/fetch-url', async (req, res) => {
     const { url, apiKey } = req.body;
 
     // Simulate Apigee API Key validation
-    const validApiKeys = ['demo-api-key-12345', 'production-key-67890'];
+    const validApiKeys = ['zCXedytPFXUsE5GeVYSgNOEHIKpuVeAQCfqBIgxcAwDDurph', 'production-key-67890'];
 
     if (!apiKey || !validApiKeys.includes(apiKey)) {
         return res.status(401).json({
